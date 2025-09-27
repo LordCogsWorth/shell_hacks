@@ -169,22 +169,360 @@ class FlightBookingAPI:
 
 
 class HotelBookingAPI:
-    """Integration with hotel booking APIs (Booking.com, Hotels.com, etc.)"""
+    """Integration with hotel booking APIs (Amadeus, Booking.com, etc.)"""
     
     def __init__(self):
+        # Load environment variables
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # Amadeus API credentials
+        self.amadeus_key = os.getenv("AMADEUS_API_KEY")
+        self.amadeus_secret = os.getenv("AMADEUS_API_SECRET")
+        
+        # Initialize Amadeus client if credentials are available
+        self.amadeus_client = None
+        if self.amadeus_key and self.amadeus_secret:
+            try:
+                from amadeus import Client, ResponseError
+                self.amadeus_client = Client(
+                    client_id=self.amadeus_key,
+                    client_secret=self.amadeus_secret
+                )
+                print("✅ Amadeus API client initialized successfully")
+            except ImportError:
+                print("❌ Amadeus SDK not installed. Using mock data.")
+            except Exception as e:
+                print(f"❌ Failed to initialize Amadeus client: {e}")
+        else:
+            print("⚠️  Amadeus API credentials not found. Using mock data.")
+            print("   Set AMADEUS_API_KEY and AMADEUS_API_SECRET in .env file")
+        
+        # Booking.com backup
         self.booking_com_key = os.getenv("BOOKING_COM_API_KEY", "test_key")
         self.base_url = "https://distribution-xml.booking.com"
     
     async def search_hotels(self, params: HotelSearchParams) -> List[Dict[str, Any]]:
-        """Search for hotels using Booking.com API"""
+        """Search for hotels using Amadeus API"""
         try:
-            # For development, return mock data
-            # In production, integrate with real Booking.com API
+            if self.amadeus_client:
+                print(f"🏨 Searching hotels in {params.destination} via Amadeus API...")
+                return await self._amadeus_hotel_search(params)
+            else:
+                print("🏨 Using mock hotel data (Amadeus API not configured)")
+                return await self._mock_hotel_search(params)
+                
+        except Exception as e:
+            print(f"❌ Hotel search error: {e}")
+            print("🏨 Falling back to mock hotel data")
             return await self._mock_hotel_search(params)
+    
+    async def _amadeus_hotel_search(self, params: HotelSearchParams) -> List[Dict[str, Any]]:
+        """Search for hotels using Amadeus API"""
+        try:
+            # Get city IATA code for hotel search
+            city_code = await self._get_city_code(params.destination)
+            
+            # Format dates for Amadeus API
+            check_in_date = params.check_in.strftime("%Y-%m-%d")
+            check_out_date = params.check_out.strftime("%Y-%m-%d")
+            
+            # Search hotels by city using Amadeus Hotel Search API
+            print(f"🔍 Searching hotels in {city_code} ({params.destination})")
+            print(f"📅 Check-in: {check_in_date}, Check-out: {check_out_date}")
+            
+            response = self.amadeus_client.reference_data.locations.hotels.by_city.get(
+                cityCode=city_code
+            )
+            
+            hotels = []
+            if response.data:
+                # Get hotel offers for the first few hotels
+                for hotel_data in response.data[:5]:  # Limit to 5 hotels for performance
+                    hotel_id = hotel_data['hotelId']
+                    
+                    try:
+                        # Get hotel offers
+                        offers_response = self.amadeus_client.shopping.hotel_offers_search.get(
+                            hotelIds=hotel_id,
+                            checkInDate=check_in_date,
+                            checkOutDate=check_out_date,
+                            adults=params.guests
+                        )
+                        
+                        if offers_response.data:
+                            hotel_offer = offers_response.data[0]
+                            hotel_info = hotel_offer['hotel']
+                            offers = hotel_offer.get('offers', [])
+                            
+                            if offers:
+                                best_offer = offers[0]  # Take the first (usually best) offer
+                                price_info = best_offer.get('price', {})
+                                
+                                nights = (params.check_out - params.check_in).days
+                                total_price = float(price_info.get('total', 0))
+                                price_per_night = total_price / nights if nights > 0 else total_price
+                                
+                                # Skip if over budget
+                                if params.max_price_per_night and price_per_night > float(params.max_price_per_night):
+                                    continue
+                                
+                                hotel = {
+                                    "id": hotel_info.get('hotelId', f"amadeus_{hotel_id}"),
+                                    "name": hotel_info.get('name', 'Unknown Hotel'),
+                                    "rating": float(hotel_info.get('rating', 4.0)),
+                                    "review_score": 8.0,  # Default since Amadeus doesn't provide this
+                                    "total_reviews": 100,  # Default
+                                    "location": hotel_info.get('cityCode', params.destination),
+                                    "address": hotel_info.get('address', {}).get('lines', [''])[0] or f"{params.destination}",
+                                    "price_per_night": Decimal(str(price_per_night)),
+                                    "total_price": Decimal(str(total_price)),
+                                    "currency": price_info.get('currency', 'USD'),
+                                    "amenities": hotel_info.get('amenities', ['Free WiFi']),
+                                    "room_type": best_offer.get('room', {}).get('typeEstimated', {}).get('category', 'Standard Room'),
+                                    "breakfast_included": 'BREAKFAST' in str(best_offer.get('board', '')),
+                                    "cancellation_policy": best_offer.get('policies', {}).get('cancellation', {}).get('description', 'See hotel policy'),
+                                    "distance_to_center": "City center area",
+                                    "amadeus_offer_id": best_offer.get('id')
+                                }
+                                hotels.append(hotel)
+                                print(f"✅ Found: {hotel['name']} - ${price_per_night:.2f}/night")
+                                
+                    except Exception as offer_error:
+                        print(f"⚠️  Could not get offers for hotel {hotel_id}: {offer_error}")
+                        continue
+                        
+            if not hotels:
+                print("ℹ️  No hotels found via Amadeus API, using mock data")
+                return await self._mock_hotel_search(params)
+                
+            print(f"🏨 Found {len(hotels)} hotels via Amadeus API")
+            return hotels
             
         except Exception as e:
-            print(f"Hotel search error: {e}")
+            print(f"❌ Amadeus hotel search failed: {e}")
+            print("🏨 Falling back to mock data")
             return await self._mock_hotel_search(params)
+    
+    async def _get_city_code(self, destination: str) -> str:
+        """Get IATA city code for hotel search"""
+        print(f"🗺️  Resolving city code for destination: '{destination}'")
+        
+        # Expanded city mappings for better coverage
+        city_mapping = {
+            # Major European Cities
+            'paris': 'PAR',
+            'london': 'LON', 
+            'amsterdam': 'AMS',
+            'barcelona': 'BCN',
+            'rome': 'ROM',
+            'madrid': 'MAD',
+            'berlin': 'BER',
+            'vienna': 'VIE',
+            'zurich': 'ZUR',
+            'geneva': 'GVA',
+            'milan': 'MIL',
+            'florence': 'FLR',
+            'venice': 'VCE',
+            'athens': 'ATH',
+            'lisbon': 'LIS',
+            'prague': 'PRG',
+            'budapest': 'BUD',
+            'warsaw': 'WAW',
+            'stockholm': 'STO',
+            'oslo': 'OSL',
+            'copenhagen': 'CPH',
+            'helsinki': 'HEL',
+            'dublin': 'DUB',
+            'edinburgh': 'EDI',
+            'manchester': 'MAN',
+            
+            # North American Cities  
+            'new york': 'NYC',
+            'los angeles': 'LAX',
+            'chicago': 'CHI',
+            'miami': 'MIA',
+            'las vegas': 'LAS',
+            'san francisco': 'SFO',
+            'boston': 'BOS',
+            'washington': 'WAS',
+            'seattle': 'SEA',
+            'toronto': 'YTO',
+            'vancouver': 'YVR',
+            'montreal': 'YMQ',
+            
+            # Asian Cities
+            'tokyo': 'TYO',
+            'osaka': 'OSA',
+            'kyoto': 'ITM',  # Uses Osaka airports
+            'seoul': 'SEL',
+            'beijing': 'BJS',
+            'shanghai': 'SHA',
+            'hong kong': 'HKG',
+            'singapore': 'SIN',
+            'bangkok': 'BKK',
+            'mumbai': 'BOM',
+            'delhi': 'DEL',
+            'bangalore': 'BLR',
+            'kuala lumpur': 'KUL',
+            'jakarta': 'JKT',
+            'manila': 'MNL',
+            
+            # Middle East & Africa
+            'dubai': 'DXB',
+            'doha': 'DOH',
+            'abu dhabi': 'AUH',
+            'istanbul': 'IST',
+            'cairo': 'CAI',
+            'casablanca': 'CMN',
+            'johannesburg': 'JNB',
+            'cape town': 'CPT',
+            
+            # Oceania
+            'sydney': 'SYD',
+            'melbourne': 'MEL',
+            'brisbane': 'BNE',
+            'perth': 'PER',
+            'auckland': 'AKL',
+            
+            # South America
+            'sao paulo': 'SAO',
+            'rio de janeiro': 'RIO',
+            'buenos aires': 'BUE',
+            'lima': 'LIM',
+            'santiago': 'SCL',
+            'bogota': 'BOG',
+            
+            # Egypt & North Africa (commonly searched)
+            'cairo': 'CAI',
+            'alexandria': 'HBE',
+            'sharm el sheikh': 'SSH',
+            'hurghada': 'HRG',
+            'luxor': 'LXR',
+            'aswan': 'ASW',
+            'marsa alam': 'RMF',
+        }
+        
+        # Country to major city mapping for common searches
+        country_to_city_mapping = {
+            'egypt': 'cairo',
+            'france': 'paris',
+            'uk': 'london',
+            'united kingdom': 'london',
+            'england': 'london',
+            'spain': 'madrid',
+            'italy': 'rome',
+            'germany': 'berlin',
+            'japan': 'tokyo',
+            'china': 'beijing',
+            'india': 'delhi',
+            'australia': 'sydney',
+            'canada': 'toronto',
+            'brazil': 'sao paulo',
+            'argentina': 'buenos aires',
+            'turkey': 'istanbul',
+            'greece': 'athens',
+            'portugal': 'lisbon',
+            'netherlands': 'amsterdam',
+            'sweden': 'stockholm',
+            'norway': 'oslo',
+            'denmark': 'copenhagen',
+            'finland': 'helsinki',
+            'russia': 'moscow',
+            'south korea': 'seoul',
+            'thailand': 'bangkok',
+            'singapore': 'singapore',
+            'malaysia': 'kuala lumpur',
+            'indonesia': 'jakarta',
+            'philippines': 'manila',
+            'vietnam': 'ho chi minh city',
+            'south africa': 'johannesburg',
+            'morocco': 'casablanca',
+            'uae': 'dubai',
+            'united arab emirates': 'dubai',
+        }
+        
+        # Clean destination and look up
+        clean_dest = destination.lower().strip()
+        original_dest = clean_dest
+        
+        # Remove common suffixes like "france", "uk", "usa", etc.
+        clean_dest = clean_dest.replace(', france', '').replace(', uk', '').replace(', usa', '')
+        clean_dest = clean_dest.replace(' france', '').replace(' uk', '').replace(' usa', '')
+        clean_dest = clean_dest.replace(', united kingdom', '').replace(', united states', '')
+        clean_dest = clean_dest.replace(', japan', '').replace(', germany', '').replace(', italy', '')
+        clean_dest = clean_dest.replace(', spain', '').replace(', netherlands', '').strip()
+        
+        # Check if this looks like a country name first
+        if clean_dest in country_to_city_mapping:
+            major_city = country_to_city_mapping[clean_dest]
+            if major_city in city_mapping:
+                code = city_mapping[major_city]
+                print(f"🌍 Country '{clean_dest}' mapped to major city '{major_city}' → {code}")
+                return code
+        
+        # Also check original destination for country patterns
+        if original_dest in country_to_city_mapping:
+            major_city = country_to_city_mapping[original_dest]
+            if major_city in city_mapping:
+                code = city_mapping[major_city]
+                print(f"🌍 Country '{original_dest}' mapped to major city '{major_city}' → {code}")
+                return code
+        
+        # Try exact match first
+        if clean_dest in city_mapping:
+            code = city_mapping[clean_dest]
+            print(f"✅ Found exact match: '{clean_dest}' → {code}")
+            return code
+            
+        # Try partial match
+        for city, code in city_mapping.items():
+            if city in clean_dest or clean_dest in city:
+                print(f"✅ Found partial match: '{clean_dest}' contains '{city}' → {code}")
+                return code
+                
+        # If not found in mapping, try to get from Amadeus Location API
+        print(f"🔍 Searching Amadeus Location API for: '{destination}'")
+        try:
+            response = self.amadeus_client.reference_data.locations.get(
+                keyword=destination.strip(),
+                subType='CITY',
+                page={'limit': 5}
+            )
+            if response.data and len(response.data) > 0:
+                best_match = response.data[0]
+                city_code = best_match.get('iataCode')
+                city_name = best_match.get('name', 'Unknown')
+                print(f"✅ Amadeus API found: '{city_name}' → {city_code}")
+                return city_code
+            else:
+                print(f"❌ No results from Amadeus Location API for '{destination}'")
+        except Exception as e:
+            print(f"❌ Amadeus Location API error for '{destination}': {e}")
+            
+        # Try a simpler keyword search if the full destination failed
+        simple_keyword = clean_dest.split(',')[0].split(' ')[0].strip()
+        if simple_keyword != clean_dest and len(simple_keyword) > 2:
+            print(f"🔄 Trying simplified search with: '{simple_keyword}'")
+            try:
+                response = self.amadeus_client.reference_data.locations.get(
+                    keyword=simple_keyword,
+                    subType='CITY',
+                    page={'limit': 3}
+                )
+                if response.data and len(response.data) > 0:
+                    best_match = response.data[0]
+                    city_code = best_match.get('iataCode')
+                    city_name = best_match.get('name', 'Unknown')
+                    print(f"✅ Simplified search found: '{city_name}' → {city_code}")
+                    return city_code
+            except Exception as e:
+                print(f"❌ Simplified search failed: {e}")
+            
+        # Final fallback - use first 3 letters of destination as city code
+        fallback_code = clean_dest[:3].upper()
+        print(f"⚠️  Using fallback city code for '{destination}': {fallback_code}")
+        return fallback_code
     
     async def _mock_hotel_search(self, params: HotelSearchParams) -> List[Dict[str, Any]]:
         """Mock hotel search results for development"""

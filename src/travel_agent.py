@@ -87,62 +87,123 @@ class TravelPlanningService:
         self.travel_apis = travel_apis
     
     async def plan_trip(self, request: TravelRequest) -> TravelItinerary:
-        """Plan a complete trip based on user requirements"""
+        """Plan a complete trip based on user requirements using real APIs"""
         
-        # Simple mock implementation to get it working
-        flights = [
-            FlightOption(
-                airline="American Airlines",
-                departure_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=8)),
-                arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=14)),
-                price=min(request.budget * Decimal("0.4"), Decimal("600")),
-                stops=0,
-                duration="6h 30m"
-            ),
-            FlightOption(
-                airline="Delta",
-                departure_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=16)),
-                arrival_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=22)),
-                price=min(request.budget * Decimal("0.3"), Decimal("500")),
-                stops=1,
-                duration="8h 15m"
+        print(f"🌍 Planning trip to {request.destination} for {request.travelers} travelers")
+        print(f"💰 Budget: ${request.budget}, Dates: {request.start_date} to {request.end_date}")
+        
+        # Use the TravelAPIManager to search all services
+        try:
+            api_results = await self.travel_apis.search_all(
+                destination=request.destination,
+                departure_location=request.departure_location,
+                start_date=request.start_date,
+                end_date=request.end_date,
+                travelers=request.travelers,
+                budget=request.budget,
+                preferences=[pref.value for pref in request.preferences]
             )
-        ]
-        
-        nights = (request.end_date - request.start_date).days
-        price_per_night = min(request.budget * Decimal("0.2") / nights if nights > 0 else request.budget * Decimal("0.2"), Decimal("200"))
-        
-        hotels = [
-            HotelOption(
-                name="Downtown Hotel",
-                rating=4.2,
-                price_per_night=price_per_night,
-                total_price=price_per_night * nights,
-                location="City Center",
-                amenities=["WiFi", "Pool", "Gym", "Restaurant"]
-            )
-        ]
-        
-        activities = [
-            ActivityOption(
-                name="City Tour",
-                type="sightseeing",
-                description="Guided city tour with local guide",
-                price=min(request.budget * Decimal("0.05"), Decimal("80")),
-                duration="3 hours",
-                location="City Center",
-                rating=4.5
-            ),
-            ActivityOption(
-                name="Museum Visit",
-                type="cultural",
-                description="Visit to local art museum",
-                price=min(request.budget * Decimal("0.03"), Decimal("45")),
-                duration="2 hours",
-                location="Arts District", 
-                rating=4.3
-            )
-        ]
+            
+            # Convert API results to Pydantic models
+            flights = []
+            if api_results.get("flights"):
+                for flight_data in api_results["flights"][:2]:  # Take first 2 flights
+                    flights.append(FlightOption(
+                        airline=flight_data.get("airline", "Unknown"),
+                        departure_time=flight_data.get("departure_time", 
+                                       datetime.combine(request.start_date, datetime.min.time().replace(hour=8))),
+                        arrival_time=flight_data.get("arrival_time",
+                                     datetime.combine(request.start_date, datetime.min.time().replace(hour=14))),
+                        price=Decimal(str(flight_data.get("price", 500))),
+                        stops=flight_data.get("stops", 0),
+                        duration=flight_data.get("duration", "6h 00m")
+                    ))
+            
+            # Convert hotel API results
+            hotels = []
+            if api_results.get("hotels"):
+                for hotel_data in api_results["hotels"][:1]:  # Take first hotel
+                    hotels.append(HotelOption(
+                        name=hotel_data.get("name", "Hotel"),
+                        rating=float(hotel_data.get("rating", 4.0)),
+                        price_per_night=Decimal(str(hotel_data.get("price_per_night", 120))),
+                        total_price=Decimal(str(hotel_data.get("total_price", 600))),
+                        location=hotel_data.get("location", "City Center"),
+                        amenities=hotel_data.get("amenities", ["WiFi"])
+                    ))
+            
+            # Convert activity API results  
+            activities = []
+            if api_results.get("activities"):
+                for activity_data in api_results["activities"][:2]:  # Take first 2 activities
+                    activities.append(ActivityOption(
+                        name=activity_data.get("name", "Activity"),
+                        type=activity_data.get("type", "sightseeing"),
+                        description=activity_data.get("description", "Fun activity"),
+                        price=Decimal(str(activity_data.get("price", 50))),
+                        duration=activity_data.get("duration", "2 hours"),
+                        location=activity_data.get("location", "City Center"),
+                        rating=float(activity_data.get("rating", 4.0))
+                    ))
+                    
+        except Exception as e:
+            print(f"❌ Error using travel APIs: {e}")
+            print("🔄 Falling back to mock data")
+            
+            # Fallback to mock data if APIs fail
+            flights = [
+                FlightOption(
+                    airline="American Airlines",
+                    departure_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=8)),
+                    arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=14)),
+                    price=min(request.budget * Decimal("0.4"), Decimal("600")),
+                    stops=0,
+                    duration="6h 30m"
+                ),
+                FlightOption(
+                    airline="Delta",
+                    departure_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=16)),
+                    arrival_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=22)),
+                    price=min(request.budget * Decimal("0.3"), Decimal("500")),
+                    stops=1,
+                    duration="8h 15m"
+                )
+            ]
+            
+            nights = (request.end_date - request.start_date).days
+            price_per_night = min(request.budget * Decimal("0.2") / nights if nights > 0 else request.budget * Decimal("0.2"), Decimal("200"))
+            
+            hotels = [
+                HotelOption(
+                    name="Downtown Hotel",
+                    rating=4.2,
+                    price_per_night=price_per_night,
+                    total_price=price_per_night * nights,
+                    location="City Center",
+                    amenities=["WiFi", "Pool", "Gym", "Restaurant"]
+                )
+            ]
+            
+            activities = [
+                ActivityOption(
+                    name="City Tour",
+                    type="sightseeing",
+                    description="Guided city tour with local guide",
+                    price=min(request.budget * Decimal("0.05"), Decimal("80")),
+                    duration="3 hours",
+                    location="City Center",
+                    rating=4.5
+                ),
+                ActivityOption(
+                    name="Museum Visit",
+                    type="cultural",
+                    description="Visit to local art museum",
+                    price=min(request.budget * Decimal("0.03"), Decimal("45")),
+                    duration="2 hours",
+                    location="Arts District", 
+                    rating=4.3
+                )
+            ]
         
         # Calculate costs
         total_cost = sum([f.price for f in flights] + 
