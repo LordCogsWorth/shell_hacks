@@ -1,0 +1,43 @@
+# TravelMaster AI Agent Requirements
+
+# Core FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# HTTP client for external APIs
+httpx==0.25.2
+aiohttp==3.9.0
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Database (optional - for booking storage)
+sqlalchemy==2.0.23
+alembic==1.12.1
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Data processing
+pandas==2.1.4
+numpy==1.25.2
+
+# Date/time handling
+python-dateutil==2.8.2
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+black==23.11.0
+isort==5.12.0
+
+# API integrations (add API keys as environment variables)
+# Amadeus SDK for flights
+amadeus==8.0.0
+
+# For future integrations
+stripe==7.8.0  # Payment processing
+twilio==8.10.0  # SMS notifications

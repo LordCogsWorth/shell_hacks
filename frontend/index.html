@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TravelMaster AI - Plan Your Dream Vacation</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        .travel-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .voice-pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Main App Component
+        function TravelMasterApp() {
+            const [currentStep, setCurrentStep] = useState('planning');
+            const [travelRequest, setTravelRequest] = useState({
+                destination: '',
+                departure_location: '',
+                start_date: '',
+                end_date: '',
+                budget: '',
+                travelers: 1,
+                preferences: [],
+                special_requirements: ''
+            });
+            const [isLoading, setIsLoading] = useState(false);
+            const [itinerary, setItinerary] = useState(null);
+            const [isListening, setIsListening] = useState(false);
+
+            // Voice Recognition Setup
+            const startVoiceRecognition = () => {
+                if ('webkitSpeechRecognition' in window) {
+                    const recognition = new webkitSpeechRecognition();
+                    recognition.continuous = false;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
+
+                    setIsListening(true);
+                    recognition.start();
+
+                    recognition.onresult = (event) => {
+                        const transcript = event.results[0][0].transcript;
+                        parseVoiceInput(transcript);
+                        setIsListening(false);
+                    };
+
+                    recognition.onerror = () => {
+                        setIsListening(false);
+                        alert('Voice recognition failed. Please try again.');
+                    };
+                } else {
+                    alert('Voice recognition not supported in this browser.');
+                }
+            };
+
+            // Parse voice input and fill form
+            const parseVoiceInput = (transcript) => {
+                console.log('Voice input:', transcript);
+                // Simple parsing - in production, use more sophisticated NLP
+                const text = transcript.toLowerCase();
+                
+                if (text.includes('paris')) setTravelRequest(prev => ({...prev, destination: 'Paris, France'}));
+                if (text.includes('london')) setTravelRequest(prev => ({...prev, destination: 'London, UK'}));
+                if (text.includes('tokyo')) setTravelRequest(prev => ({...prev, destination: 'Tokyo, Japan'}));
+                if (text.includes('new york')) setTravelRequest(prev => ({...prev, destination: 'New York, USA'}));
+                
+                // Budget parsing
+                const budgetMatch = text.match(/(\d+)\s*(?:dollars?|usd|\$)/);
+                if (budgetMatch) {
+                    setTravelRequest(prev => ({...prev, budget: budgetMatch[1]}));
+                }
+                
+                // Preference parsing
+                if (text.includes('luxury')) {
+                    setTravelRequest(prev => ({
+                        ...prev, 
+                        preferences: [...prev.preferences, 'luxury']
+                    }));
+                }
+                if (text.includes('budget')) {
+                    setTravelRequest(prev => ({
+                        ...prev, 
+                        preferences: [...prev.preferences, 'budget']
+                    }));
+                }
+                if (text.includes('adventure')) {
+                    setTravelRequest(prev => ({
+                        ...prev, 
+                        preferences: [...prev.preferences, 'adventure']
+                    }));
+                }
+            };
+
+            // Plan trip function
+            const planTrip = async () => {
+                setIsLoading(true);
+                try {
+                    const response = await fetch('http://localhost:8000/api/plan-trip', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(travelRequest),
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        setItinerary(result);
+                        setCurrentStep('results');
+                    } else {
+                        throw new Error('Failed to plan trip');
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Failed to plan trip. Please try again.');
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            // Planning Form Component
+            const PlanningForm = () => (
+                <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-4xl w-full">
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl font-bold text-white mb-4">
+                            🌍 TravelMaster AI
+                        </h1>
+                        <p className="text-white text-lg opacity-90">
+                            Plan your dream vacation with AI-powered travel assistance
+                        </p>
+                    </div>
+
+                    {/* Voice Input Button */}
+                    <div className="text-center mb-6">
+                        <button
+                            onClick={startVoiceRecognition}
+                            disabled={isListening}
+                            className={`bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-full transition-all duration-300 ${
+                                isListening ? 'voice-pulse' : ''
+                            }`}
+                        >
+                            <i className="fas fa-microphone mr-2"></i>
+                            {isListening ? 'Listening...' : 'Tell me about your trip'}
+                        </button>
+                        <p className="text-white text-sm mt-2 opacity-75">
+                            Try saying: "I want to go to Paris with a budget of 2000 dollars for a luxury trip"
+                        </p>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {/* Destination */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-map-marker-alt mr-2"></i>Destination
+                            </label>
+                            <input
+                                type="text"
+                                value={travelRequest.destination}
+                                onChange={(e) => setTravelRequest({...travelRequest, destination: e.target.value})}
+                                placeholder="Where do you want to go?"
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            />
+                        </div>
+
+                        {/* Departure Location */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-plane-departure mr-2"></i>From
+                            </label>
+                            <input
+                                type="text"
+                                value={travelRequest.departure_location}
+                                onChange={(e) => setTravelRequest({...travelRequest, departure_location: e.target.value})}
+                                placeholder="Departure city"
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            />
+                        </div>
+
+                        {/* Start Date */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-calendar-alt mr-2"></i>Start Date
+                            </label>
+                            <input
+                                type="date"
+                                value={travelRequest.start_date}
+                                onChange={(e) => setTravelRequest({...travelRequest, start_date: e.target.value})}
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            />
+                        </div>
+
+                        {/* End Date */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-calendar-check mr-2"></i>End Date
+                            </label>
+                            <input
+                                type="date"
+                                value={travelRequest.end_date}
+                                onChange={(e) => setTravelRequest({...travelRequest, end_date: e.target.value})}
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            />
+                        </div>
+
+                        {/* Budget */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-dollar-sign mr-2"></i>Budget (USD)
+                            </label>
+                            <input
+                                type="number"
+                                value={travelRequest.budget}
+                                onChange={(e) => setTravelRequest({...travelRequest, budget: e.target.value})}
+                                placeholder="Total budget"
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            />
+                        </div>
+
+                        {/* Travelers */}
+                        <div>
+                            <label className="block text-white font-semibold mb-2">
+                                <i className="fas fa-users mr-2"></i>Travelers
+                            </label>
+                            <select
+                                value={travelRequest.travelers}
+                                onChange={(e) => setTravelRequest({...travelRequest, travelers: parseInt(e.target.value)})}
+                                className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white"
+                            >
+                                {[1,2,3,4,5,6].map(num => (
+                                    <option key={num} value={num} className="text-black">{num} {num === 1 ? 'Person' : 'People'}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Preferences */}
+                    <div className="mt-6">
+                        <label className="block text-white font-semibold mb-4">
+                            <i className="fas fa-heart mr-2"></i>Travel Preferences
+                        </label>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            {['budget', 'mid_range', 'luxury', 'adventure', 'relaxation', 'cultural'].map(pref => (
+                                <label key={pref} className="flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={travelRequest.preferences.includes(pref)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setTravelRequest({
+                                                    ...travelRequest,
+                                                    preferences: [...travelRequest.preferences, pref]
+                                                });
+                                            } else {
+                                                setTravelRequest({
+                                                    ...travelRequest,
+                                                    preferences: travelRequest.preferences.filter(p => p !== pref)
+                                                });
+                                            }
+                                        }}
+                                        className="mr-2"
+                                    />
+                                    <span className="text-white capitalize">{pref.replace('_', ' ')}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Special Requirements */}
+                    <div className="mt-6">
+                        <label className="block text-white font-semibold mb-2">
+                            <i className="fas fa-info-circle mr-2"></i>Special Requirements
+                        </label>
+                        <textarea
+                            value={travelRequest.special_requirements}
+                            onChange={(e) => setTravelRequest({...travelRequest, special_requirements: e.target.value})}
+                            placeholder="Any special requests or requirements..."
+                            rows="3"
+                            className="w-full p-3 rounded-lg bg-white bg-opacity-20 text-white placeholder-white placeholder-opacity-70 border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-white resize-none"
+                        />
+                    </div>
+
+                    {/* Plan Trip Button */}
+                    <div className="text-center mt-8">
+                        <button
+                            onClick={planTrip}
+                            disabled={isLoading || !travelRequest.destination || !travelRequest.departure_location || !travelRequest.start_date || !travelRequest.end_date || !travelRequest.budget}
+                            className="bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white px-12 py-4 rounded-full font-semibold text-lg transition-all duration-300 transform hover:scale-105 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                    Planning Your Trip...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fas fa-magic mr-2"></i>
+                                    Plan My Dream Trip
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Results Display Component
+            const ResultsDisplay = () => (
+                <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-6xl w-full">
+                    <div className="text-center mb-8">
+                        <h2 className="text-3xl font-bold text-white mb-4">
+                            ✈️ Your Dream Trip to {itinerary?.request?.destination}
+                        </h2>
+                        <div className="grid md:grid-cols-3 gap-4 text-white">
+                            <div>
+                                <i className="fas fa-calendar mr-2"></i>
+                                {new Date(itinerary?.request?.start_date).toLocaleDateString()} - {new Date(itinerary?.request?.end_date).toLocaleDateString()}
+                            </div>
+                            <div>
+                                <i className="fas fa-dollar-sign mr-2"></i>
+                                Total: ${itinerary?.total_cost?.toFixed(2)}
+                            </div>
+                            <div className="text-green-300">
+                                <i className="fas fa-piggy-bank mr-2"></i>
+                                Saved: ${itinerary?.savings?.toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Budget Breakdown */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">💰 Budget Breakdown</h3>
+                        <div className="grid md:grid-cols-4 gap-4">
+                            {Object.entries(itinerary?.budget_breakdown || {}).map(([category, amount]) => (
+                                <div key={category} className="bg-white bg-opacity-20 rounded-lg p-4 text-center">
+                                    <div className="text-white font-semibold capitalize">{category}</div>
+                                    <div className="text-white text-lg">${amount?.toFixed(2)}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Flights */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">✈️ Flights</h3>
+                        <div className="space-y-4">
+                            {itinerary?.flights?.map((flight, idx) => (
+                                <div key={idx} className="bg-white bg-opacity-20 rounded-lg p-4">
+                                    <div className="flex justify-between items-center text-white">
+                                        <div>
+                                            <div className="font-semibold">{flight.airline}</div>
+                                            <div className="text-sm opacity-75">{flight.duration} • {flight.stops} stops</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-semibold">${flight.price}</div>
+                                            <div className="text-sm opacity-75">{flight.departure_time} - {flight.arrival_time}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Hotels */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">🏨 Hotels</h3>
+                        <div className="space-y-4">
+                            {itinerary?.hotels?.map((hotel, idx) => (
+                                <div key={idx} className="bg-white bg-opacity-20 rounded-lg p-4">
+                                    <div className="flex justify-between items-center text-white mb-2">
+                                        <div>
+                                            <div className="font-semibold">{hotel.name}</div>
+                                            <div className="text-sm opacity-75">⭐ {hotel.rating} • {hotel.location}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-semibold">${hotel.total_price}</div>
+                                            <div className="text-sm opacity-75">${hotel.price_per_night}/night</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-white text-sm opacity-75">
+                                        {hotel.amenities?.slice(0, 4).join(' • ')}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Activities */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">🎯 Activities</h3>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            {itinerary?.activities?.map((activity, idx) => (
+                                <div key={idx} className="bg-white bg-opacity-20 rounded-lg p-4">
+                                    <div className="text-white">
+                                        <div className="font-semibold">{activity.name}</div>
+                                        <div className="text-sm opacity-75 mb-2">⭐ {activity.rating} • {activity.duration}</div>
+                                        <div className="text-sm opacity-90 mb-2">{activity.description}</div>
+                                        <div className="font-semibold">${activity.price}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Daily Schedule */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-semibold text-white mb-4">📅 Daily Schedule</h3>
+                        <div className="space-y-4">
+                            {itinerary?.daily_schedule?.map((day, idx) => (
+                                <div key={idx} className="bg-white bg-opacity-20 rounded-lg p-4">
+                                    <div className="font-semibold text-white mb-2">
+                                        {new Date(day.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                                    </div>
+                                    <div className="space-y-2">
+                                        {day.activities?.map((activity, actIdx) => (
+                                            <div key={actIdx} className="flex justify-between text-white text-sm">
+                                                <span>{activity.time} - {activity.activity}</span>
+                                                {activity.price && <span>${activity.price}</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="text-center space-x-4">
+                        <button
+                            onClick={() => setCurrentStep('planning')}
+                            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-full font-semibold transition-all duration-300"
+                        >
+                            <i className="fas fa-edit mr-2"></i>
+                            Plan Another Trip
+                        </button>
+                        <button
+                            onClick={() => window.print()}
+                            className="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-full font-semibold transition-all duration-300"
+                        >
+                            <i className="fas fa-download mr-2"></i>
+                            Save Itinerary
+                        </button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="travel-bg min-h-screen flex items-center justify-center p-4">
+                    {currentStep === 'planning' && <PlanningForm />}
+                    {currentStep === 'results' && <ResultsDisplay />}
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<TravelMasterApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
