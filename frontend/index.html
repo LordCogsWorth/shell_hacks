@@ -145,25 +145,15 @@
             const [itinerary, setItinerary] = useState(null);
             const [isListening, setIsListening] = useState(false);
 
-            // Create refs for inputs to prevent focus loss
+            // Create refs for form inputs to avoid focus issues
             const destinationRef = useRef(null);
             const departureRef = useRef(null);
             const budgetRef = useRef(null);
-            const specialRequirementsRef = useRef(null);
-
-            // Handle form submission by reading from refs
-            const getFormData = () => {
-                return {
-                    destination: destinationRef.current?.value || travelRequest.destination,
-                    departure_location: departureRef.current?.value || travelRequest.departure_location,
-                    start_date: travelRequest.start_date,
-                    end_date: travelRequest.end_date,
-                    budget: budgetRef.current ? parseFloat(budgetRef.current.value) || 0 : travelRequest.budget,
-                    travelers: travelRequest.travelers,
-                    preferences: travelRequest.preferences,
-                    special_requirements: specialRequirementsRef.current?.value || travelRequest.special_requirements
-                };
-            };
+            const specialReqRef = useRef(null);
+            const startDateRef = useRef(null);
+            const endDateRef = useRef(null);
+            const travelersRef = useRef(null);
+            const preferencesRef = useRef(new Set());
 
             // Voice Recognition Setup
             const startVoiceRecognition = () => {
@@ -248,7 +238,7 @@
                 return `https://picsum.photos/seed/hotel${seed}/400/250`;
             };
 
-            // Function to get activity image
+            // Function to get activity image  
             const getActivityImage = (activityName, index) => {
                 const seed = (activityName + index).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
                 return `https://picsum.photos/seed/activity${seed}/300/200`;
@@ -258,13 +248,24 @@
             const planTrip = async () => {
                 setIsLoading(true);
                 try {
-                    const formData = getFormData();
+                    // Collect data from refs to avoid focus issues
+                    const requestData = {
+                        destination: destinationRef.current?.value || '',
+                        departure_location: departureRef.current?.value || '',
+                        start_date: startDateRef.current?.value || '',
+                        end_date: endDateRef.current?.value || '',
+                        budget: parseFloat(budgetRef.current?.value) || 0,
+                        travelers: parseInt(travelersRef.current?.value) || 1,
+                        preferences: Array.from(preferencesRef.current),
+                        special_requirements: specialReqRef.current?.value || ''
+                    };
+
                     const response = await fetch('http://localhost:8000/api/plan-trip', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify(formData),
+                        body: JSON.stringify(requestData),
                     });
 
                     if (response.ok) {
@@ -311,7 +312,6 @@
                                 type="text"
                                 defaultValue={travelRequest.destination}
                                 placeholder="Where do you want to go?"
-                                autoComplete="off"
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -326,7 +326,6 @@
                                 type="text"
                                 defaultValue={travelRequest.departure_location}
                                 placeholder="Where are you leaving from?"
-                                autoComplete="off"
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -337,9 +336,9 @@
                                 <i className="fas fa-calendar-alt mr-2"></i>Start Date
                             </label>
                             <input
+                                ref={startDateRef}
                                 type="date"
-                                value={travelRequest.start_date}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, start_date: e.target.value }))}
+                                defaultValue={travelRequest.start_date}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -350,9 +349,9 @@
                                 <i className="fas fa-calendar-check mr-2"></i>End Date
                             </label>
                             <input
+                                ref={endDateRef}
                                 type="date"
-                                value={travelRequest.end_date}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, end_date: e.target.value }))}
+                                defaultValue={travelRequest.end_date}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -377,8 +376,8 @@
                                 <i className="fas fa-users mr-2"></i>Travelers
                             </label>
                             <select
-                                value={travelRequest.travelers}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, travelers: parseInt(e.target.value) }))}
+                                ref={travelersRef}
+                                defaultValue={travelRequest.travelers}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                                 {[1, 2, 3, 4, 5, 6].map(num => (
@@ -398,13 +397,16 @@
                                 <label key={pref} className="flex items-center cursor-pointer">
                                     <input
                                         type="checkbox"
-                                        checked={travelRequest.preferences.includes(pref)}
-                                        onChange={(e) => setTravelRequest(prev => ({
-                                            ...prev,
-                                            preferences: e.target.checked
-                                                ? [...prev.preferences, pref]
-                                                : prev.preferences.filter(p => p !== pref)
-                                        }))}
+                                        name="preferences"
+                                        value={pref}
+                                        defaultChecked={travelRequest.preferences.includes(pref)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                preferencesRef.current.add(pref);
+                                            } else {
+                                                preferencesRef.current.delete(pref);
+                                            }
+                                        }}
                                         className="mr-2"
                                     />
                                     <span className="text-gray-700 capitalize">{pref.replace('_', ' ')}</span>
@@ -419,7 +421,7 @@
                             <i className="fas fa-info-circle mr-2"></i>Special Requirements
                         </label>
                         <textarea
-                            ref={specialRequirementsRef}
+                            ref={specialReqRef}
                             defaultValue={travelRequest.special_requirements}
                             placeholder="Any special requests or requirements?"
                             rows="3"
@@ -432,8 +434,8 @@
                         <button
                             onClick={startVoiceRecognition}
                             className={`px-8 py-4 rounded-lg font-semibold transition-all shadow-lg ${isListening
-                                ? 'bg-red-500 text-white voice-pulse'
-                                : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
+                                    ? 'bg-red-500 text-white voice-pulse'
+                                    : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
                                 }`}
                         >
                             <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'} mr-2`}></i>
@@ -521,7 +523,7 @@
                                 <div className="font-semibold text-gray-600">Budget Used</div>
                                 <div className="text-2xl font-bold text-gray-800">${parseFloat(itinerary?.total_cost || 0).toFixed(2)}</div>
                                 <div className="text-sm text-purple-600 mt-1">
-                                    {((parseFloat(itinerary?.total_cost || 0) / parseFloat(itinerary?.request?.budget || 1)) * 100).toFixed(1)}% of ${parseFloat(itinerary?.request?.budget || 0).toFixed(2)}
+                                    {((parseFloat(itinerary?.total_cost || 0) / parseFloat(itinerary?.request?.budget || 1)) * 100).toFixed(1)}% of ${parseFloat(itinerary?.request?.budget || 0).toFixed(0)}
                                 </div>
                             </div>
                             <div className="stat-card">
@@ -536,7 +538,7 @@
                                 <i className="fas fa-star text-3xl text-yellow-500 mb-3"></i>
                                 <div className="font-semibold text-gray-600">AI Score</div>
                                 <div className="text-2xl font-bold text-yellow-600">
-                                    {Math.min(99, Math.max(85, 95 - (itinerary?.total_cost / itinerary?.request?.budget) * 10)).toFixed(0)}/100
+                                    {Math.min(99, Math.max(85, 95 - (parseFloat(itinerary?.total_cost || 0) / parseFloat(itinerary?.request?.budget || 1)) * 10)).toFixed(0)}/100
                                 </div>
                                 <div className="text-sm text-yellow-500 mt-1">Optimization Rating</div>
                             </div>
@@ -563,7 +565,7 @@
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="font-bold text-2xl text-gray-800">${parseFloat(flight.price).toFixed(2)}</div>
+                                            <div className="font-bold text-2xl text-gray-800">${parseFloat(flight.price || 0).toFixed(0)}</div>
                                             <div className="text-sm text-gray-500">{flight.booking_class || 'Economy'}</div>
                                         </div>
                                     </div>
@@ -625,8 +627,8 @@
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="font-bold text-2xl text-gray-800">${parseFloat(hotel.total_price).toFixed(2)}</div>
-                                                <div className="text-sm text-gray-500">${parseFloat(hotel.price_per_night).toFixed(2)}/night</div>
+                                                <div className="font-bold text-2xl text-gray-800">${parseFloat(hotel.total_price || 0).toFixed(0)}</div>
+                                                <div className="text-sm text-gray-500">${parseFloat(hotel.price_per_night || 0).toFixed(0)}/night</div>
                                             </div>
                                         </div>
                                         <div className="text-gray-600 text-sm mb-3">
@@ -679,7 +681,7 @@
                                         </div>
                                         <div className="text-sm text-gray-600 mb-4 leading-relaxed">{activity.description}</div>
                                         <div className="flex justify-between items-center">
-                                            <div className="font-bold text-xl text-gray-800">${parseFloat(activity.price).toFixed(2)}</div>
+                                            <div className="font-bold text-xl text-gray-800">${parseFloat(activity.price || 0).toFixed(0)}</div>
                                             <div className="text-sm text-gray-500">
                                                 <i className="fas fa-ticket-alt mr-1"></i>per person
                                             </div>
@@ -716,7 +718,7 @@
             );
         }
 
-        // Render the app using React 18 createRoot API
+        // Render the app (React 18 compatible)
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<TravelMasterApp />);
     </script>
