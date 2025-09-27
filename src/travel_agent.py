@@ -37,12 +37,19 @@ class TravelRequest(BaseModel):
 
 
 class FlightOption(BaseModel):
+    flight_id: str
     airline: str
+    aircraft: Optional[str]
     departure_time: datetime
     arrival_time: datetime
+    departure_airport: str
+    arrival_airport: str
     price: Decimal
     stops: int = 0
     duration: str
+    travel_class: str
+    available_seats: str
+    instant_confirmation: bool = True
 
 
 class HotelOption(BaseModel):
@@ -112,15 +119,32 @@ class TravelPlanningService:
             flights = []
             if api_results.get("flights"):
                 for flight_data in api_results["flights"][:2]:  # Take first 2 flights
+                    # Build full FlightOption from API fields
+                    departure_str = flight_data.get("departure_time", "")
+                    arrival_str = flight_data.get("arrival_time", "")
+                    try:
+                        departure_time = datetime.fromisoformat(departure_str.replace('Z', '+00:00')) if departure_str else datetime.combine(request.start_date, datetime.min.time().replace(hour=8))
+                    except:
+                        departure_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=8))
+                    try:
+                        arrival_time = datetime.fromisoformat(arrival_str.replace('Z', '+00:00')) if arrival_str else datetime.combine(request.start_date, datetime.min.time().replace(hour=14))
+                    except:
+                        arrival_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=14))
+
                     flights.append(FlightOption(
+                        flight_id=flight_data.get("id", "unknown"),
                         airline=flight_data.get("airline", "Unknown"),
-                        departure_time=flight_data.get("departure_time", 
-                                       datetime.combine(request.start_date, datetime.min.time().replace(hour=8))),
-                        arrival_time=flight_data.get("arrival_time",
-                                     datetime.combine(request.start_date, datetime.min.time().replace(hour=14))),
+                        aircraft=flight_data.get("aircraft"),
+                        departure_time=departure_time,
+                        arrival_time=arrival_time,
+                        departure_airport=flight_data.get("departure_airport", ""),
+                        arrival_airport=flight_data.get("arrival_airport", ""),
                         price=Decimal(str(flight_data.get("price", 500))),
                         stops=flight_data.get("stops", 0),
-                        duration=flight_data.get("duration", "6h 00m")
+                        duration=flight_data.get("duration", "6h 00m"),
+                        travel_class=flight_data.get("class", "Economy"),
+                        available_seats=f"{flight_data.get('available_seats', 0)} seats available",
+                        instant_confirmation=bool(flight_data.get("instant_confirmation", True))
                     ))
             
             # Convert hotel API results
@@ -136,11 +160,14 @@ class TravelPlanningService:
                         amenities=hotel_data.get("amenities", ["WiFi"])
                     ))
             
-            # Convert activity API results - show all activities the AI selected
+            # Convert activity API results - show sights to see and things to do
             activities = []
             if api_results.get("activities"):
-                print(f"🎯 AI Agent selected {len(api_results['activities'])} activities for your trip:")
-                for i, activity_data in enumerate(api_results["activities"][:6], 1):  # Show up to 6 activities
+                # Separate sights vs activities
+                sights = []
+                experiences = []
+                
+                for activity_data in api_results["activities"][:8]:  # Process up to 8 items
                     activity = ActivityOption(
                         name=activity_data.get("name", "Activity"),
                         type=activity_data.get("type", "sightseeing"),
@@ -151,7 +178,30 @@ class TravelPlanningService:
                         rating=float(activity_data.get("rating", 4.0))
                     )
                     activities.append(activity)
-                    print(f"   {i}. {activity.name} - ${activity.price} ({activity.duration})")
+                    
+                    # Categorize as sight vs activity (check both type and category fields)
+                    activity_type = activity_data.get("type", "")
+                    activity_category = activity_data.get("category", "")
+                    combined_type = f"{activity_type} {activity_category}".lower()
+                    
+                    if any(word in combined_type for word in ["sight", "landmark", "viewpoint", "district", "architectural"]):
+                        sights.append(activity)
+                    else:
+                        experiences.append(activity)
+                
+                # Display organized results
+                print(f"🎯 AI Agent found {len(sights)} sights to see and {len(experiences)} activities to do:")
+                
+                if sights:
+                    print("   👁️  SIGHTS TO SEE:")
+                    for i, sight in enumerate(sights[:4], 1):
+                        price_text = f"${sight.price}" if sight.price > 0 else "Free"
+                        print(f"      {i}. {sight.name} - {price_text} ({sight.duration})")
+                
+                if experiences:
+                    print("   🎪 ACTIVITIES TO DO:")
+                    for i, exp in enumerate(experiences[:4], 1):
+                        print(f"      {i}. {exp.name} - ${exp.price} ({exp.duration})")
                     
         except Exception as e:
             print(f"❌ Error using travel APIs: {e}")
@@ -292,26 +342,109 @@ class TravelPlanningService:
         return schedule
     
     async def _find_flights(self, request: TravelRequest, budget: Decimal) -> List[FlightOption]:
-        """Find flight options within budget"""
-        # Mock flight data - replace with real API calls
-        await asyncio.sleep(0.1)  # Simulate API call
-        
+        """Find flight options using real Flight API"""
+        try:
+            from .travel_apis import FlightBookingAPI, FlightSearchParams
+            
+            flight_api = FlightBookingAPI()
+            flight_params = FlightSearchParams(
+                origin=request.departure_location,
+                destination=request.destination,
+                departure_date=request.start_date,
+                return_date=request.end_date,
+                passengers=request.travelers,
+                max_price=budget * Decimal("0.6")  # 60% of budget for flights
+            )
+            
+            flight_results = await flight_api.search_flights(flight_params)
+            
+            # Convert API results to FlightOption objects
+            flights = []
+            for flight_data in flight_results[:4]:  # Top 4 flights
+                try:
+                    # Parse departure time (handle various formats)
+                    departure_str = flight_data.get("departure_time", "")
+                    if departure_str:
+                        # Try to parse ISO format or create mock time
+                        try:
+                            departure_time = datetime.fromisoformat(departure_str.replace('Z', '+00:00'))
+                        except:
+                            departure_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=8))
+                    else:
+                        departure_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=8))
+                    
+                    # Parse arrival time
+                    arrival_str = flight_data.get("arrival_time", "")
+                    if arrival_str:
+                        try:
+                            arrival_time = datetime.fromisoformat(arrival_str.replace('Z', '+00:00'))
+                        except:
+                            arrival_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=14))
+                    else:
+                        arrival_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=14))
+                    
+                    flight = FlightOption(
+                        flight_id=flight_data.get("id", f"flight_{len(flights)+1}"),
+                        airline=flight_data.get("airline", "Unknown Airline"),
+                        aircraft=flight_data.get("aircraft"),
+                        departure_time=departure_time,
+                        arrival_time=arrival_time,
+                        departure_airport=flight_data.get("departure_airport", ""),
+                        arrival_airport=flight_data.get("arrival_airport", ""),
+                        price=Decimal(str(flight_data.get("price", 450))),
+                        stops=flight_data.get("stops", 0),
+                        duration=flight_data.get("duration", "6h 30m"),
+                        travel_class=flight_data.get("class", "Economy"),
+                        available_seats=f"{flight_data.get('available_seats', 0)} seats available",
+                        instant_confirmation=bool(flight_data.get("instant_confirmation", True))
+                    )
+                    flights.append(flight)
+                except Exception as parse_error:
+                    print(f"⚠️  Error parsing flight data: {parse_error}")
+                    continue
+            
+            if flights:
+                return flights
+            else:
+                # Fallback to mock data if no flights found
+                return self._mock_flights(request, budget)
+                
+        except Exception as e:
+            print(f"❌ Flight API error in travel agent: {e}")
+            return self._mock_flights(request, budget)
+    
+    def _mock_flights(self, request: TravelRequest, budget: Decimal) -> List[FlightOption]:
+        """Fallback mock flight data"""
         return [
             FlightOption(
+                flight_id="flight_001",
                 airline="American Airlines",
+                aircraft="Boeing 737-800",
                 departure_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=8)),
-                arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=14)),
-                price=min(budget * Decimal("0.8"), Decimal("450")),
+                arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=14, minute=30)),
+                departure_airport="JFK",
+                arrival_airport="CDG",
+                price=min(budget * Decimal("0.4"), Decimal("540")),
                 stops=0,
-                duration="6h 30m"
+                duration="6h 30m",
+                travel_class="Economy",
+                available_seats="15 seats available",
+                instant_confirmation=True
             ),
             FlightOption(
-                airline="Delta",
-                departure_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=16)),
-                arrival_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=22)),
-                price=min(budget * Decimal("0.2"), Decimal("380")),
+                flight_id="flight_002",
+                airline="Delta Air Lines",
+                aircraft="Airbus A320",
+                departure_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=12)),
+                arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=20, minute=45)),
+                departure_airport="JFK",
+                arrival_airport="CDG",
+                price=min(budget * Decimal("0.3"), Decimal("450")),
                 stops=1,
-                duration="8h 15m"
+                duration="8h 45m",
+                travel_class="Economy",
+                available_seats="8 seats available",
+                instant_confirmation=True
             )
         ]
     
