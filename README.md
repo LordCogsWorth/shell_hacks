@@ -93,7 +93,7 @@ Update the `.env` file with your API keys for full functionality:
 AMADEUS_API_KEY=your_amadeus_key
 AMADEUS_API_SECRET=your_amadeus_secret
 
-# Hotel booking APIs  
+# Hotel booking APIs
 BOOKING_COM_API_KEY=your_booking_key
 
 # Activity booking APIs
@@ -148,7 +148,7 @@ async def plan_trip():
                 "destination": "Paris, France",
                 "departure_location": "New York, NY",
                 "start_date": "2024-06-15",
-                "end_date": "2024-06-22", 
+                "end_date": "2024-06-22",
                 "budget": 3500,
                 "travelers": 2,
                 "preferences": ["cultural", "luxury"]
@@ -172,3 +172,4 @@ Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) fil
 ## 📄 License
 
 This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for more details.
+# Test push

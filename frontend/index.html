@@ -238,7 +238,7 @@
                 return `https://picsum.photos/seed/hotel${seed}/400/250`;
             };
 
-            // Function to get activity image  
+            // Function to get activity image
             const getActivityImage = (activityName, index) => {
                 const seed = (activityName + index).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
                 return `https://picsum.photos/seed/activity${seed}/300/200`;
