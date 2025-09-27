@@ -521,24 +521,24 @@
                             <div className="stat-card">
                                 <i className="fas fa-wallet text-3xl text-purple-500 mb-3"></i>
                                 <div className="font-semibold text-gray-600">Budget Used</div>
-                                <div className="text-2xl font-bold text-gray-800">${itinerary?.total_cost?.toFixed(2)}</div>
+                                <div className="text-2xl font-bold text-gray-800">${parseFloat(itinerary?.total_cost || 0).toFixed(2)}</div>
                                 <div className="text-sm text-purple-600 mt-1">
-                                    {((itinerary?.total_cost / itinerary?.request?.budget) * 100).toFixed(1)}% of ${itinerary?.request?.budget}
+                                    {((parseFloat(itinerary?.total_cost || 0) / parseFloat(itinerary?.request?.budget || 1)) * 100).toFixed(1)}% of ${parseFloat(itinerary?.request?.budget || 0).toFixed(0)}
                                 </div>
                             </div>
                             <div className="stat-card">
                                 <i className="fas fa-piggy-bank text-3xl text-green-500 mb-3"></i>
                                 <div className="font-semibold text-gray-600">Money Saved</div>
-                                <div className="text-2xl font-bold text-green-600">${itinerary?.savings?.toFixed(2)}</div>
+                                <div className="text-2xl font-bold text-green-600">${parseFloat(itinerary?.savings || 0).toFixed(2)}</div>
                                 <div className="text-sm text-green-500 mt-1">
-                                    {((itinerary?.savings / itinerary?.request?.budget) * 100).toFixed(1)}% under budget!
+                                    {((parseFloat(itinerary?.savings || 0) / parseFloat(itinerary?.request?.budget || 1)) * 100).toFixed(1)}% under budget!
                                 </div>
                             </div>
                             <div className="stat-card">
                                 <i className="fas fa-star text-3xl text-yellow-500 mb-3"></i>
                                 <div className="font-semibold text-gray-600">AI Score</div>
                                 <div className="text-2xl font-bold text-yellow-600">
-                                    {Math.min(99, Math.max(85, 95 - (itinerary?.total_cost / itinerary?.request?.budget) * 10)).toFixed(0)}/100
+                                    {Math.min(99, Math.max(85, 95 - (parseFloat(itinerary?.total_cost || 0) / parseFloat(itinerary?.request?.budget || 1)) * 10)).toFixed(0)}/100
                                 </div>
                                 <div className="text-sm text-yellow-500 mt-1">Optimization Rating</div>
                             </div>
@@ -565,7 +565,7 @@
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <div className="font-bold text-2xl text-gray-800">${flight.price}</div>
+                                            <div className="font-bold text-2xl text-gray-800">${parseFloat(flight.price || 0).toFixed(0)}</div>
                                             <div className="text-sm text-gray-500">{flight.booking_class || 'Economy'}</div>
                                         </div>
                                     </div>
@@ -627,8 +627,8 @@
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="font-bold text-2xl text-gray-800">${hotel.total_price}</div>
-                                                <div className="text-sm text-gray-500">${hotel.price_per_night}/night</div>
+                                                <div className="font-bold text-2xl text-gray-800">${parseFloat(hotel.total_price || 0).toFixed(0)}</div>
+                                                <div className="text-sm text-gray-500">${parseFloat(hotel.price_per_night || 0).toFixed(0)}/night</div>
                                             </div>
                                         </div>
                                         <div className="text-gray-600 text-sm mb-3">
@@ -681,7 +681,7 @@
                                         </div>
                                         <div className="text-sm text-gray-600 mb-4 leading-relaxed">{activity.description}</div>
                                         <div className="flex justify-between items-center">
-                                            <div className="font-bold text-xl text-gray-800">${activity.price}</div>
+                                            <div className="font-bold text-xl text-gray-800">${parseFloat(activity.price || 0).toFixed(0)}</div>
                                             <div className="text-sm text-gray-500">
                                                 <i className="fas fa-ticket-alt mr-1"></i>per person
                                             </div>
@@ -718,8 +718,9 @@
             );
         }
 
-        // Render the app
-        ReactDOM.render(<TravelMasterApp />, document.getElementById('root'));
+        // Render the app (React 18 compatible)
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TravelMasterApp />);
     </script>
 </body>
 

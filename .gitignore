@@ -5,8 +5,16 @@ __pycache__
 .mypy_cache
 .pytest_cache
 .ruff_cache
-.venv
+.venv/
+venv/
 test_venv/
 coverage.xml
 .nox
 spec.json
+
+# Test files (optional - remove if you want to track them)
+test_hotel_activities.py
+test_integration.py
+
+# Server logs
+server.log
