@@ -207,6 +207,11 @@ class FlightBookingAPI:
                 "max": "5",
                 "currencyCode": "USD"
             }
+            
+            # Add return date for round-trip search
+            if params.return_date:
+                query["returnDate"] = params.return_date.strftime("%Y-%m-%d")
+                print(f"🔄 Round-trip search: Return on {query['returnDate']}")
 
             print(f"🌐 Amadeus flight search: {origin_code} -> {dest_code} on {departure_date}")
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -220,58 +225,134 @@ class FlightBookingAPI:
                 offers = data.get("data", [])
                 flights: List[Dict[str, Any]] = []
 
-                for i, offer in enumerate(offers[:5]):
+                for i, offer in enumerate(offers[:3]):  # Process top 3 offers
                     try:
                         itineraries = offer.get("itineraries", [])
                         if not itineraries:
                             continue
-                        first_itin = itineraries[0]
-                        segments = first_itin.get("segments", [])
-                        if not segments:
-                            continue
-                        first_seg = segments[0]
-
-                        carrier = first_seg.get("carrierCode", "")
-                        airline = self._get_airline_name_from_code(carrier)
 
                         price_obj = offer.get("price", {})
                         total_price = float(price_obj.get("total", 0) or 0)
 
-                        departure = first_seg.get("departure", {})
-                        arrival = first_seg.get("arrival", {})
+                        # Handle round-trip (2 itineraries) vs one-way (1 itinerary)
+                        if len(itineraries) >= 2 and params.return_date:
+                            # Round-trip: Create outbound and return flights
+                            outbound_itin = itineraries[0]
+                            return_itin = itineraries[1]
+                            
+                            # Process outbound flight
+                            out_segments = outbound_itin.get("segments", [])
+                            if out_segments:
+                                out_seg = out_segments[0]
+                                out_carrier = out_seg.get("carrierCode", "")
+                                out_airline = self._get_airline_name_from_code(out_carrier)
+                                out_departure = out_seg.get("departure", {})
+                                out_arrival = out_seg.get("arrival", {})
+                                
+                                outbound_flight = {
+                                    "id": f"amadeus_out_{i+1}",
+                                    "airline": out_airline,
+                                    "flight_number": f"{out_carrier}{out_seg.get('number', '')}",
+                                    "aircraft": out_seg.get('aircraft', {}).get('code', 'Boeing 737') if isinstance(out_seg.get('aircraft', {}), dict) else out_seg.get('aircraft', 'Boeing 737'),
+                                    "departure_time": out_departure.get("at", ""),
+                                    "arrival_time": out_arrival.get("at", ""),
+                                    "departure_airport": origin_code,  # Force correct outbound: origin -> destination
+                                    "departure_airport_name": self._get_airport_name(params.origin),
+                                    "arrival_airport": dest_code,
+                                    "arrival_airport_name": self._get_airport_name(params.destination),
+                                    "duration": outbound_itin.get("duration", ""),
+                                    "price": total_price / 2,  # Split price between outbound and return
+                                    "currency": price_obj.get("currency", "USD"),
+                                    "stops": max(0, len(out_segments) - 1),
+                                    "class": offer.get('travelerPricings', [{}])[0].get('fareDetailsBySegment', [{}])[0].get('cabin', 'Economy') if offer.get('travelerPricings') else 'Economy',
+                                    "available_seats": offer.get('numberOfBookableSeats', 20),
+                                    "instant_confirmation": True,
+                                    "source": "amadeus_api",
+                                    "trip_type": "outbound"
+                                }
+                                
+                                if not params.max_price or outbound_flight["price"] <= float(params.max_price) / 2:
+                                    flights.append(outbound_flight)
+                            
+                            # Process return flight
+                            ret_segments = return_itin.get("segments", [])
+                            if ret_segments:
+                                ret_seg = ret_segments[0]
+                                ret_carrier = ret_seg.get("carrierCode", "")
+                                ret_airline = self._get_airline_name_from_code(ret_carrier)
+                                ret_departure = ret_seg.get("departure", {})
+                                ret_arrival = ret_seg.get("arrival", {})
+                                
+                                return_flight = {
+                                    "id": f"amadeus_ret_{i+1}",
+                                    "airline": ret_airline,
+                                    "flight_number": f"{ret_carrier}{ret_seg.get('number', '')}",
+                                    "aircraft": ret_seg.get('aircraft', {}).get('code', 'Boeing 737') if isinstance(ret_seg.get('aircraft', {}), dict) else ret_seg.get('aircraft', 'Boeing 737'),
+                                    "departure_time": ret_departure.get("at", ""),
+                                    "arrival_time": ret_arrival.get("at", ""),
+                                    "departure_airport": dest_code,  # Force return: destination -> origin
+                                    "departure_airport_name": self._get_airport_name(params.destination),
+                                    "arrival_airport": origin_code,   # Force return: destination -> origin
+                                    "arrival_airport_name": self._get_airport_name(params.origin),
+                                    "duration": return_itin.get("duration", ""),
+                                    "price": total_price / 2,  # Split price between outbound and return
+                                    "currency": price_obj.get("currency", "USD"),
+                                    "stops": max(0, len(ret_segments) - 1),
+                                    "class": offer.get('travelerPricings', [{}])[0].get('fareDetailsBySegment', [{}])[0].get('cabin', 'Economy') if offer.get('travelerPricings') else 'Economy',
+                                    "available_seats": offer.get('numberOfBookableSeats', 20),
+                                    "instant_confirmation": True,
+                                    "source": "amadeus_api",
+                                    "trip_type": "return"
+                                }
+                                
+                                if not params.max_price or return_flight["price"] <= float(params.max_price) / 2:
+                                    flights.append(return_flight)
+                        
+                        else:
+                            # One-way flight handling
+                            first_itin = itineraries[0]
+                            segments = first_itin.get("segments", [])
+                            if not segments:
+                                continue
+                            first_seg = segments[0]
 
-                        # Attempt to glean aircraft and travel class from segments/offer
-                        aircraft = first_seg.get('aircraft', {}).get('code') if isinstance(first_seg.get('aircraft', {}), dict) else first_seg.get('aircraft')
-                        travel_class = offer.get('travelerPricings', [{}])[0].get('fareDetailsBySegment', [{}])[0].get('cabin', '') if offer.get('travelerPricings') else ''
-                        available_seats = offer.get('numberOfBookableSeats', None) or first_seg.get('numberOfBookableSeats', None)
+                            carrier = first_seg.get("carrierCode", "")
+                            airline = self._get_airline_name_from_code(carrier)
 
-                        flight_info = {
-                            "id": f"amadeus_{i+1}",
-                            "airline": airline,
-                            "flight_number": f"{carrier}{first_seg.get('number', '')}",
-                            "aircraft": aircraft,
-                            "departure_time": departure.get("at", "") ,
-                            "arrival_time": arrival.get("at", ""),
-                            "departure_airport": departure.get('iataCode', origin_code),
-                            "arrival_airport": arrival.get('iataCode', dest_code),
-                            "duration": first_itin.get("duration", ""),
-                            "price": total_price,
-                            "currency": price_obj.get("currency", "USD"),
-                            "stops": max(0, len(segments) - 1),
-                            "class": travel_class or offer.get('class', 'Economy'),
-                            "available_seats": available_seats or 0,
-                            "instant_confirmation": True,
-                            "source": "amadeus_api"
-                        }
+                            departure = first_seg.get("departure", {})
+                            arrival = first_seg.get("arrival", {})
 
-                        if not params.max_price or flight_info["price"] <= float(params.max_price):
-                            flights.append(flight_info)
+                            flight_info = {
+                                "id": f"amadeus_{i+1}",
+                                "airline": airline,
+                                "flight_number": f"{carrier}{first_seg.get('number', '')}",
+                                "aircraft": first_seg.get('aircraft', {}).get('code', 'Boeing 737') if isinstance(first_seg.get('aircraft', {}), dict) else first_seg.get('aircraft', 'Boeing 737'),
+                                "departure_time": departure.get("at", ""),
+                                "arrival_time": arrival.get("at", ""),
+                                "departure_airport": departure.get('iataCode', origin_code),
+                                "arrival_airport": arrival.get('iataCode', dest_code),
+                                "duration": first_itin.get("duration", ""),
+                                "price": total_price,
+                                "currency": price_obj.get("currency", "USD"),
+                                "stops": max(0, len(segments) - 1),
+                                "class": offer.get('travelerPricings', [{}])[0].get('fareDetailsBySegment', [{}])[0].get('cabin', 'Economy') if offer.get('travelerPricings') else 'Economy',
+                                "available_seats": offer.get('numberOfBookableSeats', 20),
+                                "instant_confirmation": True,
+                                "source": "amadeus_api",
+                                "trip_type": "one_way"
+                            }
+
+                            if not params.max_price or flight_info["price"] <= float(params.max_price):
+                                flights.append(flight_info)
                     except Exception as item_err:
                         print(f"⚠️  Error parsing Amadeus offer: {item_err}")
                         continue
 
                 if flights:
                     print(f"✅ Found {len(flights)} flights via Amadeus")
+                    # Debug: show flight details
+                    for flight in flights:
+                        print(f"   {flight.get('trip_type', 'unknown').upper()}: {flight.get('departure_airport')} -> {flight.get('arrival_airport')} ({flight.get('flight_number')})")
                     return flights
                 else:
                     print("⚠️  No offers from Amadeus, falling back to mock flights")
@@ -282,67 +363,115 @@ class FlightBookingAPI:
             return await self._mock_flight_search(params)
 
     async def _mock_flight_search(self, params: FlightSearchParams) -> List[Dict[str, Any]]:
-        """Mock flight search results for development"""
+        """Mock flight search results for development with proper round-trip support"""
         await asyncio.sleep(0.3)  # Simulate API delay
         
         base_price = min(params.max_price or Decimal("800"), Decimal("600"))
+        origin_code = self._get_airport_code(params.origin)
+        dest_code = self._get_airport_code(params.destination)
         
-        return [
+        flights = []
+        
+        # Outbound flights
+        outbound_flights = [
             {
-                "id": "flight_001",
+                "id": "mock_out_001",
                 "airline": "American Airlines",
                 "flight_number": "AA1234",
-                "departure_airport": self._get_airport_code(params.origin),
+                "departure_airport": origin_code,
                 "departure_airport_name": self._get_airport_name(params.origin),
-                "arrival_airport": self._get_airport_code(params.destination),
+                "arrival_airport": dest_code,
                 "arrival_airport_name": self._get_airport_name(params.destination),
                 "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=8)),
                 "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=14, minute=30)),
                 "duration": "6h 30m",
                 "stops": 0,
-                "price": base_price * Decimal("0.9"),
+                "price": base_price * Decimal("0.45"),  # Half price for outbound
                 "currency": "USD",
                 "class": "Economy",
                 "available_seats": 15,
-                "aircraft": "Boeing 737-800"
+                "aircraft": "Boeing 737-800",
+                "trip_type": "outbound",
+                "source": "mock_api"
             },
             {
-                "id": "flight_002", 
+                "id": "mock_out_002", 
                 "airline": "Delta Air Lines",
                 "flight_number": "DL5678",
-                "departure_airport": self._get_airport_code(params.origin),
+                "departure_airport": origin_code,
                 "departure_airport_name": self._get_airport_name(params.origin),
-                "arrival_airport": self._get_airport_code(params.destination),
+                "arrival_airport": dest_code,
                 "arrival_airport_name": self._get_airport_name(params.destination),
                 "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=12)),
                 "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=20, minute=45)),
                 "duration": "8h 45m",
                 "stops": 1,
-                "price": base_price * Decimal("0.75"),
+                "price": base_price * Decimal("0.375"),  # Half price for outbound
                 "currency": "USD",
                 "class": "Economy",
                 "available_seats": 8,
-                "aircraft": "Airbus A320"
-            },
-            {
-                "id": "flight_003",
-                "airline": "United Airlines", 
-                "flight_number": "UA9012",
-                "departure_airport": self._get_airport_code(params.origin),
-                "departure_airport_name": self._get_airport_name(params.origin),
-                "arrival_airport": self._get_airport_code(params.destination),
-                "arrival_airport_name": self._get_airport_name(params.destination),
-                "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=15)),
-                "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=21, minute=15)),
-                "duration": "6h 15m",
-                "stops": 0,
-                "price": base_price * Decimal("1.1"),
-                "currency": "USD", 
-                "class": "Economy Plus",
-                "available_seats": 22,
-                "aircraft": "Boeing 777-300ER"
+                "aircraft": "Airbus A320",
+                "trip_type": "outbound",
+                "source": "mock_api"
             }
         ]
+        
+        flights.extend(outbound_flights)
+        
+        # Return flights (if round-trip)
+        if params.return_date:
+            return_flights = [
+                {
+                    "id": "mock_ret_001",
+                    "airline": "American Airlines",
+                    "flight_number": "AA4321",
+                    "departure_airport": dest_code,  # Return: destination -> origin
+                    "departure_airport_name": self._get_airport_name(params.destination),
+                    "arrival_airport": origin_code,
+                    "arrival_airport_name": self._get_airport_name(params.origin),
+                    "departure_time": datetime.combine(params.return_date, datetime.min.time().replace(hour=10)),
+                    "arrival_time": datetime.combine(params.return_date, datetime.min.time().replace(hour=16, minute=45)),
+                    "duration": "6h 45m",
+                    "stops": 0,
+                    "price": base_price * Decimal("0.45"),  # Half price for return
+                    "currency": "USD",
+                    "class": "Economy",
+                    "available_seats": 18,
+                    "aircraft": "Boeing 737-800",
+                    "trip_type": "return",
+                    "source": "mock_api"
+                },
+                {
+                    "id": "mock_ret_002", 
+                    "airline": "Delta Air Lines",
+                    "flight_number": "DL8765",
+                    "departure_airport": dest_code,  # Return: destination -> origin
+                    "departure_airport_name": self._get_airport_name(params.destination),
+                    "arrival_airport": origin_code,
+                    "arrival_airport_name": self._get_airport_name(params.origin),
+                    "departure_time": datetime.combine(params.return_date, datetime.min.time().replace(hour=15)),
+                    "arrival_time": datetime.combine(params.return_date, datetime.min.time().replace(hour=23, minute=30)),
+                    "duration": "8h 30m",
+                    "stops": 1,
+                    "price": base_price * Decimal("0.375"),  # Half price for return
+                    "currency": "USD",
+                    "class": "Economy",
+                    "available_seats": 12,
+                    "aircraft": "Airbus A320",
+                    "trip_type": "return",
+                    "source": "mock_api"
+                }
+            ]
+            
+            flights.extend(return_flights)
+        
+        # Debug: show mock flight details
+        if flights:
+            print(f"✅ Created {len(flights)} mock flights")
+            for flight in flights:
+                print(f"   {flight.get('trip_type', 'unknown').upper()}: {flight.get('departure_airport')} -> {flight.get('arrival_airport')} ({flight.get('flight_number')})")
+        
+        return flights
 
 
 class HotelBookingAPI:
@@ -877,8 +1006,10 @@ class ActivityBookingAPI:
                 unique_activities = self._filter_diverse_activities(all_activities, max_budget)
                 
                 if unique_activities:
-                    print(f"✅ Found {len(unique_activities)} diverse TripAdvisor activities")
-                    return unique_activities[:8]  # Return top 8 diverse activities
+                    # Enhance images with Google Places API, especially for Egypt
+                    enhanced_activities = await self._enhance_with_google_places_images(unique_activities, destination)
+                    print(f"✅ Found {len(enhanced_activities)} diverse TripAdvisor activities")
+                    return enhanced_activities[:8]  # Return top 8 diverse activities
                 else:
                     print(f"⚠️  No diverse activities found, using enhanced mock data")
                     return await self._mock_activity_search(destination, max_budget, preferences)
@@ -929,18 +1060,24 @@ class ActivityBookingAPI:
         primary_info = attraction.get("primaryInfo", "").lower()
         activity_type = self._categorize_activity_type(primary_info)
         
+        # Get image URL - prefer Google Places for better quality, especially for Egypt
+        image_url = self._get_attraction_image_url(attraction)
+        activity_name = attraction.get("name", "Unknown Activity")
+        
         activity = {
-            "name": attraction.get("name", "Unknown Activity"),
+            "name": activity_name,
             "type": activity_type,
             "description": attraction.get("secondaryInfo", "Interesting local experience"),
             "location": destination,
             "price": round(price, 2),
             "duration": self._estimate_duration(primary_info),
             "rating": float(attraction.get("averageRating", 4.2)),
-            "image_url": self._get_attraction_image_url(attraction),
+            "image_url": image_url,
             "tripadvisor_url": self._get_attraction_url(attraction),
             "source": "tripadvisor",
-            "category": primary_info
+            "category": primary_info,
+            "google_places_image_pending": True,  # Flag to fetch Google Places image later
+            "activity_name_for_google": activity_name  # Store for Google Places search
         }
         
         if activity["price"] <= float(max_budget):
@@ -1022,6 +1159,101 @@ class ActivityBookingAPI:
         if card_photo and card_photo.get("sizes", {}).get("urlTemplate"):
             return card_photo["sizes"]["urlTemplate"].replace("{width}", "400").replace("{height}", "300")
         return ""
+    
+    async def _get_google_places_image(self, place_name: str, destination: str) -> str:
+        """Get high-quality image from Google Places API"""
+        try:
+            google_places_key = os.getenv("GOOGLE_PLACES_API_KEY")
+            if not google_places_key:
+                return ""
+            
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                # Search for the specific place
+                search_url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+                search_params = {
+                    "query": f"{place_name} {destination}",
+                    "key": google_places_key
+                }
+                
+                response = await client.get(search_url, params=search_params)
+                response.raise_for_status()
+                search_data = response.json()
+                
+                if search_data.get("status") == "OK" and search_data.get("results"):
+                    place = search_data["results"][0]
+                    photos = place.get("photos", [])
+                    
+                    if photos:
+                        photo_reference = photos[0].get("photo_reference")
+                        if photo_reference:
+                            # Get high-quality photo
+                            photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_reference}&key={google_places_key}"
+                            return photo_url
+                            
+        except Exception as e:
+            print(f"⚠️ Google Places image fetch error: {e}")
+        
+        return ""
+    
+    async def _enhance_with_google_places_images(self, activities: List[Dict[str, Any]], destination: str) -> List[Dict[str, Any]]:
+        """Enhance activities with Google Places images, especially for Egypt and when TripAdvisor images are missing"""
+        google_places_key = os.getenv("GOOGLE_PLACES_API_KEY")
+        if not google_places_key:
+            print("⚠️ Google Places API not configured - using TripAdvisor images only")
+            return activities
+        
+        enhanced_activities = []
+        
+        for activity in activities:
+            # Check if we should fetch a Google Places image
+            should_fetch_google_image = (
+                not activity.get("image_url") or  # No TripAdvisor image
+                "egypt" in destination.lower() or  # Always enhance Egypt images
+                "cairo" in destination.lower() or
+                "giza" in destination.lower() or
+                "luxor" in destination.lower()
+            )
+            
+            if should_fetch_google_image and activity.get("activity_name_for_google"):
+                try:
+                    google_image = await self._get_google_places_image(
+                        activity["activity_name_for_google"], 
+                        destination
+                    )
+                    if google_image:
+                        activity["image_url"] = google_image
+                        activity["image_source"] = "google_places"
+                        print(f"🖼️ Enhanced image for {activity['name']} via Google Places")
+                    elif not activity.get("image_url"):
+                        # Fallback to a generic travel image
+                        activity["image_url"] = self._get_fallback_image_url(activity["name"], destination)
+                        activity["image_source"] = "fallback"
+                except Exception as e:
+                    print(f"⚠️ Failed to enhance image for {activity['name']}: {e}")
+            
+            # Clean up temporary fields
+            activity.pop("google_places_image_pending", None)
+            activity.pop("activity_name_for_google", None)
+            
+            enhanced_activities.append(activity)
+        
+        return enhanced_activities
+    
+    def _get_fallback_image_url(self, activity_name: str, destination: str) -> str:
+        """Provide fallback images for activities when APIs fail"""
+        # Use Unsplash for high-quality travel images
+        query = f"{destination} travel"
+        if "egypt" in destination.lower():
+            if any(keyword in activity_name.lower() for keyword in ["pyramid", "giza", "sphinx"]):
+                query = "egypt pyramids"
+            elif any(keyword in activity_name.lower() for keyword in ["nile", "river", "cruise"]):
+                query = "nile river egypt"
+            elif any(keyword in activity_name.lower() for keyword in ["temple", "luxor", "karnak"]):
+                query = "egypt temple"
+            else:
+                query = "egypt cairo"
+        
+        return f"https://source.unsplash.com/800x600/?{query.replace(' ', ',')}"
 
     def _get_attraction_url(self, attraction: dict) -> str:
         """Extract TripAdvisor URL from attraction data"""

@@ -266,7 +266,7 @@
                         special_requirements: specialReqRef.current?.value || ''
                     };
 
-                    const response = await fetch('http://localhost:8000/api/plan-trip', {
+                    const response = await fetch('http://localhost:8001/api/plan-trip', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
