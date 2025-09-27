@@ -244,6 +244,12 @@
                 return `https://picsum.photos/seed/activity${seed}/300/200`;
             };
 
+            // Function to get restaurant image
+            const getRestaurantImage = (restaurantName, index) => {
+                const seed = (restaurantName + index).split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+                return `https://picsum.photos/seed/restaurant${seed}/400/250`;
+            };
+
             // Plan trip function
             const planTrip = async () => {
                 setIsLoading(true);
@@ -686,6 +692,78 @@
                                                 <i className="fas fa-ticket-alt mr-1"></i>per person
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Restaurants */}
+                    <div className="mb-8">
+                        <h3 className="text-2xl font-semibold text-gray-800 mb-6 flex items-center">
+                            <i className="fas fa-utensils mr-3 text-orange-300"></i>🍽️ Highly Rated Restaurants
+                        </h3>
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {itinerary?.restaurants?.map((restaurant, idx) => (
+                                <div key={idx} className="travel-card p-0 overflow-hidden">
+                                    <img
+                                        src={getRestaurantImage(restaurant.name, idx)}
+                                        alt={restaurant.name}
+                                        className="w-full h-48 object-cover"
+                                        onError={(e) => {
+                                            e.target.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80';
+                                        }}
+                                    />
+                                    <div className="p-5">
+                                        <div className="font-bold text-lg text-gray-800 mb-2">{restaurant.name}</div>
+                                        <div className="flex items-center mb-3">
+                                            <div className="flex text-yellow-400 mr-2">
+                                                {[...Array(Math.floor(restaurant.rating))].map((_, i) => (
+                                                    <i key={i} className="fas fa-star text-sm"></i>
+                                                ))}
+                                                {restaurant.rating % 1 !== 0 && <i className="fas fa-star-half-alt text-sm"></i>}
+                                            </div>
+                                            <span className="text-sm text-gray-600 mr-3">{restaurant.rating}</span>
+                                            <span className="airport-info">
+                                                <i className="fas fa-users mr-1"></i>{restaurant.reviews_count} reviews
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-600 mb-2">
+                                            <i className="fas fa-map-marker-alt mr-2 text-red-400"></i>
+                                            {restaurant.address}
+                                        </div>
+                                        <div className="text-sm text-blue-600 mb-3">
+                                            <i className="fas fa-utensils mr-2"></i>
+                                            {restaurant.cuisine_types?.join(', ') || 'International'}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mb-3">
+                                            {restaurant.specialties?.slice(0, 2).join(' • ')}
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <div className="font-bold text-xl text-gray-800">
+                                                ${parseFloat(restaurant.estimated_cost || 0).toFixed(0)}
+                                            </div>
+                                            <div className="text-sm text-gray-500">
+                                                <div className="flex items-center">
+                                                    {[...Array(restaurant.price_level || 2)].map((_, i) => (
+                                                        <span key={i} className="text-green-500">$</span>
+                                                    ))}
+                                                    <span className="ml-1">avg per meal</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {restaurant.opening_hours?.length > 0 && (
+                                            <div className="text-xs text-gray-500 mt-2">
+                                                <i className="fas fa-clock mr-1"></i>
+                                                {restaurant.opening_hours[0]}
+                                            </div>
+                                        )}
+                                        {restaurant.phone && (
+                                            <div className="text-xs text-blue-500 mt-1">
+                                                <i className="fas fa-phone mr-1"></i>
+                                                {restaurant.phone}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}

@@ -71,11 +71,27 @@ class ActivityOption(BaseModel):
     rating: float
 
 
+class RestaurantOption(BaseModel):
+    id: str
+    name: str
+    rating: float
+    price_level: int  # 0-4 scale from Google Places
+    address: str
+    cuisine_types: List[str]
+    estimated_cost: Decimal
+    reviews_count: int
+    phone: Optional[str] = ""
+    website: Optional[str] = ""
+    opening_hours: List[str] = []
+    specialties: List[str] = []
+
+
 class TravelItinerary(BaseModel):
     request: TravelRequest
     flights: List[FlightOption]
     hotels: List[HotelOption]
     activities: List[ActivityOption]
+    restaurants: List[RestaurantOption]  # ← NEW
     total_cost: Decimal
     savings: Decimal
     daily_schedule: List[Dict[str, Any]]
@@ -131,21 +147,28 @@ class TravelPlanningService:
                     except:
                         arrival_time = datetime.combine(request.start_date, datetime.min.time().replace(hour=14))
 
-                    flights.append(FlightOption(
-                        flight_id=flight_data.get("id", "unknown"),
-                        airline=flight_data.get("airline", "Unknown"),
-                        aircraft=flight_data.get("aircraft"),
-                        departure_time=departure_time,
-                        arrival_time=arrival_time,
-                        departure_airport=flight_data.get("departure_airport", ""),
-                        arrival_airport=flight_data.get("arrival_airport", ""),
-                        price=Decimal(str(flight_data.get("price", 500))),
-                        stops=flight_data.get("stops", 0),
-                        duration=flight_data.get("duration", "6h 00m"),
-                        travel_class=flight_data.get("class", "Economy"),
-                        available_seats=f"{flight_data.get('available_seats', 0)} seats available",
-                        instant_confirmation=bool(flight_data.get("instant_confirmation", True))
-                    ))
+                    try:
+                        flight_option = FlightOption(
+                            flight_id=flight_data.get("id", "unknown"),
+                            airline=flight_data.get("airline", "Unknown"),
+                            aircraft=flight_data.get("aircraft"),
+                            departure_time=departure_time,
+                            arrival_time=arrival_time,
+                            departure_airport=flight_data.get("departure_airport", ""),
+                            arrival_airport=flight_data.get("arrival_airport", ""),
+                            price=Decimal(str(flight_data.get("price", 500))),
+                            stops=flight_data.get("stops", 0),
+                            duration=flight_data.get("duration", "6h 00m"),
+                            travel_class=flight_data.get("class", "Economy"),
+                            available_seats=f"{flight_data.get('available_seats', 0)} seats available",
+                            instant_confirmation=bool(flight_data.get("instant_confirmation", True))
+                        )
+                        flights.append(flight_option)
+                        print(f"✅ Created FlightOption: {flight_option.airline}")
+                    except Exception as flight_error:
+                        print(f"❌ Error creating FlightOption: {flight_error}")
+                        print(f"   Flight data: {flight_data}")
+                        continue
             
             # Convert hotel API results
             hotels = []
@@ -210,20 +233,34 @@ class TravelPlanningService:
             # Fallback to mock data if APIs fail
             flights = [
                 FlightOption(
+                    flight_id="mock_flight_001",
                     airline="American Airlines",
+                    aircraft="Boeing 737-800",
                     departure_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=8)),
                     arrival_time=datetime.combine(request.start_date, datetime.min.time().replace(hour=14)),
+                    departure_airport=request.departure_location[:3].upper(),
+                    arrival_airport=request.destination[:3].upper(),
                     price=min(request.budget * Decimal("0.4"), Decimal("600")),
                     stops=0,
-                    duration="6h 30m"
+                    duration="6h 30m",
+                    travel_class="Economy",
+                    available_seats="15 seats available",
+                    instant_confirmation=True
                 ),
                 FlightOption(
+                    flight_id="mock_flight_002",
                     airline="Delta",
+                    aircraft="Airbus A320",
                     departure_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=16)),
                     arrival_time=datetime.combine(request.end_date, datetime.min.time().replace(hour=22)),
+                    departure_airport=request.destination[:3].upper(),
+                    arrival_airport=request.departure_location[:3].upper(),
                     price=min(request.budget * Decimal("0.3"), Decimal("500")),
                     stops=1,
-                    duration="8h 15m"
+                    duration="8h 15m",
+                    travel_class="Economy",
+                    available_seats="8 seats available",
+                    instant_confirmation=True
                 )
             ]
             
@@ -262,20 +299,83 @@ class TravelPlanningService:
                 )
             ]
         
-        # Calculate costs
-        total_cost = sum([f.price for f in flights] + 
-                        [h.total_price for h in hotels] + 
-                        [a.price for a in activities])
+        # Search for restaurants within budget
+        try:
+            restaurant_results = await self.travel_apis.search_restaurants(
+                destination=request.destination,
+                max_budget_per_meal=float(request.budget * Decimal("0.02")),  # 2% of budget per meal
+                cuisine_preferences=[pref.value for pref in request.preferences]
+            )
+            
+            # Convert API results to RestaurantOption objects
+            restaurants = []
+            if restaurant_results.get("restaurants"):
+                for restaurant_data in restaurant_results["restaurants"][:4]:  # Top 4 restaurants
+                    restaurants.append(RestaurantOption(
+                        id=restaurant_data.get("id", f"restaurant_{len(restaurants)+1}"),
+                        name=restaurant_data.get("name", "Restaurant"),
+                        rating=float(restaurant_data.get("rating", 4.0)),
+                        price_level=int(restaurant_data.get("price_level", 2)),
+                        address=restaurant_data.get("address", "City Center"),
+                        cuisine_types=restaurant_data.get("cuisine_types", ["International"]),
+                        estimated_cost=Decimal(str(restaurant_data.get("estimated_cost", 30))),
+                        reviews_count=int(restaurant_data.get("reviews_count", 100)),
+                        phone=restaurant_data.get("phone", ""),
+                        website=restaurant_data.get("website", ""),
+                        opening_hours=restaurant_data.get("opening_hours", []),
+                        specialties=restaurant_data.get("specialties", [])
+                    ))
+        except Exception as e:
+            print(f"❌ Error fetching restaurants: {e}")
+            # Fallback to mock restaurant data
+            restaurants = [
+                RestaurantOption(
+                    id="rest_001",
+                    name="Local Cuisine Restaurant",
+                    rating=4.5,
+                    price_level=2,
+                    address="Downtown Area",
+                    cuisine_types=["Local", "Traditional"],
+                    estimated_cost=Decimal("35"),
+                    reviews_count=150,
+                    phone="+1-555-0123",
+                    website="",
+                    opening_hours=["Mon-Sun: 11:00 AM - 10:00 PM"],
+                    specialties=["Local specialties", "Fresh ingredients"]
+                ),
+                RestaurantOption(
+                    id="rest_002", 
+                    name="Fine Dining Experience",
+                    rating=4.8,
+                    price_level=3,
+                    address="Arts District",
+                    cuisine_types=["International", "Fine Dining"],
+                    estimated_cost=Decimal("65"),
+                    reviews_count=85,
+                    phone="+1-555-0456",
+                    website="",
+                    opening_hours=["Tue-Sat: 6:00 PM - 11:00 PM"],
+                    specialties=["Chef's special", "Wine pairing"]
+                )
+            ]
+
+        # Calculate costs including restaurants
+        flight_costs = sum(f.price for f in flights)
+        hotel_costs = sum(h.total_price for h in hotels) 
+        activity_costs = sum(a.price for a in activities)
+        restaurant_costs = sum(r.estimated_cost for r in restaurants)
         
+        total_cost = Decimal(str(flight_costs + hotel_costs + activity_costs + restaurant_costs))
         savings = request.budget - total_cost
-        
+
         budget_breakdown = {
-            "flights": sum(f.price for f in flights),
-            "hotels": sum(h.total_price for h in hotels),
-            "activities": sum(a.price for a in activities),
+            "flights": flight_costs,
+            "hotels": hotel_costs,
+            "activities": activity_costs,
+            "restaurants": restaurant_costs,
             "remaining": savings
         }
-        
+
         # Generate detailed daily schedule showing all selected activities
         try:
             daily_schedule = self._generate_daily_schedule(request, activities)
@@ -292,12 +392,13 @@ class TravelPlanningService:
                 }
                 for day in range(duration_days)
             ]
-        
+
         return TravelItinerary(
             request=request,
             flights=flights,
             hotels=hotels,
             activities=activities,
+            restaurants=restaurants,
             total_cost=total_cost,
             savings=savings,
             daily_schedule=daily_schedule,
@@ -585,6 +686,10 @@ async def plan_trip(request: TravelRequest):
         itinerary = await travel_service.plan_trip(request)
         return itinerary
     except Exception as e:
+        import traceback
+        print(f"❌ ERROR in plan_trip: {type(e).__name__}: {str(e)}")
+        print(f"❌ Full traceback:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to plan trip: {str(e)}")
 
 
@@ -592,6 +697,26 @@ async def plan_trip(request: TravelRequest):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "TravelMaster AI Agent"}
+
+
+@app.get("/api/restaurants/{destination}")
+async def get_restaurants(destination: str, budget_per_meal: float = 50.0, cuisine: Optional[str] = None):
+    """Search for restaurants in a specific destination"""
+    try:
+        cuisine_preferences = [cuisine] if cuisine else []
+        restaurant_results = await travel_service.travel_apis.search_restaurants(
+            destination=destination,
+            max_budget_per_meal=budget_per_meal,
+            cuisine_preferences=cuisine_preferences
+        )
+        
+        return {
+            "destination": destination,
+            "budget_per_meal": budget_per_meal,
+            "restaurants": restaurant_results.get("restaurants", [])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to search restaurants: {str(e)}")
 
 
 @app.get("/")

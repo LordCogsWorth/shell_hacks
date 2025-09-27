@@ -1250,6 +1250,224 @@ class ActivityBookingAPI:
         return sights[:3] + activities[:3]
 
 
+class RestaurantBookingAPI:
+    """Integration with Google Places API for restaurant searches"""
+    
+    def __init__(self):
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        self.google_places_key = os.getenv("GOOGLE_PLACES_API_KEY")
+        self.google_places_base_url = "https://maps.googleapis.com/maps/api/place"
+        
+        if self.google_places_key:
+            print("✅ Google Places API credentials detected — using real restaurant data")
+        else:
+            print("⚠️  Google Places API key not found. Using mock restaurant data.")
+            print("   Set GOOGLE_PLACES_API_KEY in .env file")
+    
+    async def search_restaurants(self, destination: str, max_budget_per_meal: float = 50.0,
+                               cuisine_preferences: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Search for restaurants in destination using Google Places API"""
+        
+        if not self.google_places_key:
+            print("🍽️ Using mock restaurant data (Google Places API not configured)")
+            return await self._get_mock_restaurants(destination, max_budget_per_meal, cuisine_preferences)
+        
+        try:
+            # Build search query based on preferences
+            query_parts = [f"restaurants in {destination}"]
+            
+            if cuisine_preferences:
+                # Filter preferences for cuisine-related terms
+                cuisine_terms = []
+                for pref in cuisine_preferences:
+                    if any(cuisine in pref.lower() for cuisine in ["food", "culinary", "cuisine", "dining"]):
+                        if "luxury" in pref.lower():
+                            cuisine_terms.append("fine dining")
+                        elif "budget" in pref.lower():
+                            cuisine_terms.append("casual dining")
+                        else:
+                            cuisine_terms.append("restaurant")
+                
+                if cuisine_terms:
+                    query_parts.extend(cuisine_terms)
+            
+            search_query = " ".join(query_parts)
+            
+            # Use Google Places Text Search API
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                # Text search for restaurants
+                text_search_url = f"{self.google_places_base_url}/textsearch/json"
+                text_params = {
+                    "query": search_query,
+                    "type": "restaurant", 
+                    "key": self.google_places_key
+                }
+                
+                response = await client.get(text_search_url, params=text_params)
+                response.raise_for_status()
+                search_data = response.json()
+                
+                restaurants = []
+                if search_data.get("status") == "OK" and search_data.get("results"):
+                    for place in search_data["results"][:6]:  # Get top 6 restaurants
+                        # Get detailed information for each restaurant
+                        place_id = place.get("place_id")
+                        if place_id:
+                            details = await self._get_place_details(client, place_id)
+                            restaurant_info = self._parse_restaurant_data(place, details, max_budget_per_meal)
+                            if restaurant_info:
+                                restaurants.append(restaurant_info)
+                
+                if restaurants:
+                    print(f"🍽️ Found {len(restaurants)} restaurants via Google Places API")
+                    return {"restaurants": restaurants}
+                else:
+                    print("🍽️ No restaurants found via API, using mock data")
+                    return await self._get_mock_restaurants(destination, max_budget_per_meal, cuisine_preferences)
+                    
+        except Exception as e:
+            print(f"❌ Google Places API error: {e}")
+            return await self._get_mock_restaurants(destination, max_budget_per_meal, cuisine_preferences)
+    
+    async def _get_place_details(self, client: httpx.AsyncClient, place_id: str) -> Dict[str, Any]:
+        """Get detailed information about a restaurant"""
+        try:
+            details_url = f"{self.google_places_base_url}/details/json"
+            details_params = {
+                "place_id": place_id,
+                "fields": "name,rating,price_level,formatted_address,formatted_phone_number,website,opening_hours,user_ratings_total,types",
+                "key": self.google_places_key
+            }
+            
+            response = await client.get(details_url, params=details_params)
+            response.raise_for_status()
+            details_data = response.json()
+            
+            if details_data.get("status") == "OK":
+                return details_data.get("result", {})
+        except Exception as e:
+            print(f"❌ Error getting place details: {e}")
+        
+        return {}
+    
+    def _parse_restaurant_data(self, place: Dict[str, Any], details: Dict[str, Any], max_budget: float) -> Optional[Dict[str, Any]]:
+        """Parse restaurant data from Google Places API response"""
+        try:
+            name = place.get("name", "Restaurant")
+            rating = place.get("rating", 4.0)
+            price_level = place.get("price_level", 2)  # 0-4 scale
+            
+            # Estimate cost based on price level
+            price_multipliers = {0: 0.5, 1: 0.7, 2: 1.0, 3: 1.5, 4: 2.0}
+            base_cost = max_budget * price_multipliers.get(price_level, 1.0)
+            
+            # Skip if too expensive
+            if base_cost > max_budget * 1.5:
+                return None
+            
+            # Extract cuisine types from place types
+            cuisine_types = []
+            place_types = place.get("types", []) + details.get("types", [])
+            cuisine_keywords = ["restaurant", "food", "meal_takeaway", "cafe", "bar"]
+            for place_type in place_types:
+                if any(keyword in place_type.lower() for keyword in cuisine_keywords):
+                    cuisine_types.append(place_type.replace("_", " ").title())
+            
+            if not cuisine_types:
+                cuisine_types = ["Restaurant"]
+            
+            # Get opening hours
+            opening_hours = []
+            if details.get("opening_hours", {}).get("weekday_text"):
+                opening_hours = details["opening_hours"]["weekday_text"][:3]  # First 3 days
+            
+            return {
+                "id": place.get("place_id", f"restaurant_{hash(name)}"),
+                "name": name,
+                "rating": rating,
+                "price_level": price_level,
+                "address": details.get("formatted_address", place.get("vicinity", "City Center")),
+                "cuisine_types": cuisine_types[:2],  # Limit to 2 types
+                "estimated_cost": base_cost,
+                "reviews_count": place.get("user_ratings_total", details.get("user_ratings_total", 0)),
+                "phone": details.get("formatted_phone_number", ""),
+                "website": details.get("website", ""),
+                "opening_hours": opening_hours,
+                "specialties": [f"{name} specialties", "Local favorites"] if rating >= 4.0 else ["Popular dishes"]
+            }
+            
+        except Exception as e:
+            print(f"❌ Error parsing restaurant data: {e}")
+            return None
+    
+    async def _get_mock_restaurants(self, destination: str, max_budget: float, 
+                                  cuisine_preferences: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Generate mock restaurant data as fallback"""
+        
+        restaurants = [
+            {
+                "id": "mock_rest_001",
+                "name": f"{destination} Local Kitchen",
+                "rating": 4.5,
+                "price_level": 2,
+                "address": f"123 Main Street, {destination}",
+                "cuisine_types": ["Local", "Traditional"],
+                "estimated_cost": max_budget * 0.8,
+                "reviews_count": 250,
+                "phone": "+1-555-0123",
+                "website": "",
+                "opening_hours": ["Mon-Sun: 11:00 AM - 10:00 PM"],
+                "specialties": ["Local specialties", "Traditional dishes"]
+            },
+            {
+                "id": "mock_rest_002", 
+                "name": f"{destination} Fine Dining",
+                "rating": 4.8,
+                "price_level": 3,
+                "address": f"456 Gourmet Avenue, {destination}",
+                "cuisine_types": ["International", "Fine Dining"],
+                "estimated_cost": max_budget * 1.3,
+                "reviews_count": 150,
+                "phone": "+1-555-0456",
+                "website": "",
+                "opening_hours": ["Tue-Sat: 6:00 PM - 11:00 PM"],
+                "specialties": ["Chef's special", "Wine pairing"]
+            },
+            {
+                "id": "mock_rest_003",
+                "name": f"Cozy {destination} Cafe",
+                "rating": 4.3,
+                "price_level": 1,
+                "address": f"789 Cafe Street, {destination}",
+                "cuisine_types": ["Cafe", "Light Meals"],
+                "estimated_cost": max_budget * 0.6,
+                "reviews_count": 180,
+                "phone": "+1-555-0789",
+                "website": "",
+                "opening_hours": ["Daily: 7:00 AM - 9:00 PM"],
+                "specialties": ["Fresh pastries", "Coffee blends"]
+            },
+            {
+                "id": "mock_rest_004",
+                "name": f"{destination} Street Food Market",
+                "rating": 4.2,
+                "price_level": 1,
+                "address": f"Central Market, {destination}",
+                "cuisine_types": ["Street Food", "Casual"],
+                "estimated_cost": max_budget * 0.4,
+                "reviews_count": 320,
+                "phone": "",
+                "website": "",
+                "opening_hours": ["Mon-Sat: 10:00 AM - 8:00 PM"],
+                "specialties": ["Local street food", "Quick bites"]
+            }
+        ]
+        
+        return {"restaurants": restaurants}
+
+
 class TravelAPIManager:
     """Main manager for all travel API integrations"""
     
@@ -1257,17 +1475,25 @@ class TravelAPIManager:
         self.flight_api = FlightBookingAPI()
         self.hotel_api = HotelBookingAPI()
         self.activity_api = ActivityBookingAPI()
+        self.restaurant_api = RestaurantBookingAPI()  # ← NEW
+    
+    async def search_restaurants(self, destination: str, max_budget_per_meal: float = 50.0,
+                               cuisine_preferences: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """Search for restaurants using the restaurant API"""
+        return await self.restaurant_api.search_restaurants(destination, max_budget_per_meal, cuisine_preferences)
     
     async def search_all(self, destination: str, departure_location: str, 
                         start_date: date, end_date: date, 
                         travelers: int, budget: Decimal,
                         preferences: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
-        """Search flights, hotels, and activities simultaneously"""
+        """Search flights, hotels, activities, and restaurants simultaneously"""
         
-        # Calculate budget allocation
-        flight_budget = budget * Decimal("0.4")  # 40% for flights
-        hotel_budget = budget * Decimal("0.35")   # 35% for hotels  
-        activity_budget = budget * Decimal("0.2") # 20% for activities (5% buffer)
+        # Calculate budget allocation (updated with restaurants)
+        flight_budget = budget * Decimal("0.35")   # 35% for flights (was 40%)
+        hotel_budget = budget * Decimal("0.35")    # 35% for hotels  
+        activity_budget = budget * Decimal("0.15") # 15% for activities (was 20%)
+        restaurant_budget = budget * Decimal("0.10") # 10% for restaurants (NEW)
+        # 5% buffer remaining
         
         # Create search parameters
         flight_params = FlightSearchParams(
@@ -1288,11 +1514,17 @@ class TravelAPIManager:
             max_price_per_night=hotel_budget / nights if nights > 0 else hotel_budget
         )
         
+        # Calculate restaurant budget per meal (assuming 3 meals per day)
+        trip_days = (end_date - start_date).days or 1
+        total_meals = trip_days * 3  # 3 meals per day
+        budget_per_meal = float(restaurant_budget / total_meals) if total_meals > 0 else 50.0
+        
         # Execute searches concurrently
         results = await asyncio.gather(
             self.flight_api.search_flights(flight_params),
             self.hotel_api.search_hotels(hotel_params),
             self.activity_api.search_activities(destination, activity_budget, preferences),
+            self.restaurant_api.search_restaurants(destination, budget_per_meal, preferences),
             return_exceptions=True
         )
         
@@ -1300,11 +1532,13 @@ class TravelAPIManager:
         flights = cast(List[Dict[str, Any]], results[0] if not isinstance(results[0], Exception) else [])
         hotels = cast(List[Dict[str, Any]], results[1] if not isinstance(results[1], Exception) else [])
         activities = cast(List[Dict[str, Any]], results[2] if not isinstance(results[2], Exception) else [])
+        restaurants = cast(Dict[str, List[Dict[str, Any]]], results[3] if not isinstance(results[3], Exception) else {}).get("restaurants", [])
         
         return {
             "flights": flights,
             "hotels": hotels, 
-            "activities": activities
+            "activities": activities,
+            "restaurants": restaurants
         }
 
 
