@@ -37,23 +37,17 @@ class FlightBookingAPI:
     """Integration with flight booking APIs (Amadeus, Skyscanner, etc.)"""
     
     def __init__(self):
-        self.amadeus_key = os.getenv("AMADEUS_API_KEY", "test_key")
-        self.amadeus_secret = os.getenv("AMADEUS_API_SECRET", "test_secret")
+        self.api_key = "CHxXACuhjtuRfXFr8GwAnSZ0Nz53w8SY"
+        self.api_secret = "sAmlzGXP4eMlhJ1Y"
         self.base_url = "https://test.api.amadeus.com"
         self.access_token = None
         
         # Airport mapping for common destinations
         self.airport_codes = {
-            "paris": "CDG",
-            "london": "LHR", 
-            "tokyo": "NRT",
-            "new york": "JFK",
-            "los angeles": "LAX",
-            "barcelona": "BCN",
-            "rome": "FCO",
-            "amsterdam": "AMS",
-            "berlin": "BER",
-            "madrid": "MAD"
+            "paris": "CDG", "london": "LHR", "tokyo": "NRT",
+            "new york": "JFK", "los angeles": "LAX", "miami": "MIA",
+            "barcelona": "BCN", "rome": "FCO", "amsterdam": "AMS",
+            "berlin": "BER", "madrid": "MAD"
         }
         
         self.airport_names = {
