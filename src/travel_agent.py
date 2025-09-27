@@ -92,6 +92,10 @@ class TravelPlanningService:
         print(f"🌍 Planning trip to {request.destination} for {request.travelers} travelers")
         print(f"💰 Budget: ${request.budget}, Dates: {request.start_date} to {request.end_date}")
         
+        # Validate dates
+        if request.end_date <= request.start_date:
+            raise HTTPException(status_code=400, detail="End date must be after start date")
+        
         # Use the TravelAPIManager to search all services
         try:
             api_results = await self.travel_apis.search_all(
@@ -132,11 +136,12 @@ class TravelPlanningService:
                         amenities=hotel_data.get("amenities", ["WiFi"])
                     ))
             
-            # Convert activity API results  
+            # Convert activity API results - show all activities the AI selected
             activities = []
             if api_results.get("activities"):
-                for activity_data in api_results["activities"][:2]:  # Take first 2 activities
-                    activities.append(ActivityOption(
+                print(f"🎯 AI Agent selected {len(api_results['activities'])} activities for your trip:")
+                for i, activity_data in enumerate(api_results["activities"][:6], 1):  # Show up to 6 activities
+                    activity = ActivityOption(
                         name=activity_data.get("name", "Activity"),
                         type=activity_data.get("type", "sightseeing"),
                         description=activity_data.get("description", "Fun activity"),
@@ -144,7 +149,9 @@ class TravelPlanningService:
                         duration=activity_data.get("duration", "2 hours"),
                         location=activity_data.get("location", "City Center"),
                         rating=float(activity_data.get("rating", 4.0))
-                    ))
+                    )
+                    activities.append(activity)
+                    print(f"   {i}. {activity.name} - ${activity.price} ({activity.duration})")
                     
         except Exception as e:
             print(f"❌ Error using travel APIs: {e}")
@@ -219,16 +226,22 @@ class TravelPlanningService:
             "remaining": savings
         }
         
-        # Simple daily schedule
-        daily_schedule = []
-        for day in range((request.end_date - request.start_date).days):
-            current_date = request.start_date + timedelta(days=day)
-            daily_schedule.append({
-                "date": current_date.isoformat(),
-                "day_number": day + 1,
-                "activities": [activities[0].name] if day == 0 and activities else [],
-                "estimated_cost": activities[0].price if day == 0 and activities else Decimal("0")
-            })
+        # Generate detailed daily schedule showing all selected activities
+        try:
+            daily_schedule = self._generate_daily_schedule(request, activities)
+        except Exception as e:
+            print(f"❌ Error generating daily schedule: {e}")
+            # Fallback to simple schedule
+            duration_days = (request.end_date - request.start_date).days
+            daily_schedule = [
+                {
+                    "date": (request.start_date + timedelta(days=day)).isoformat(),
+                    "day_number": day + 1,
+                    "activities": [],
+                    "estimated_cost": 0
+                }
+                for day in range(duration_days)
+            ]
         
         return TravelItinerary(
             request=request,
@@ -242,21 +255,40 @@ class TravelPlanningService:
         )
     
     def _generate_daily_schedule(self, request: TravelRequest, activities: List[ActivityOption]) -> List[Dict[str, Any]]:
-        """Generate a daily schedule for the trip"""
+        """Generate a day-by-day schedule with detailed activity information"""
         schedule = []
-        num_days = (request.end_date - request.start_date).days
         
-        for day in range(num_days):
+        # Calculate duration from dates
+        duration_days = (request.end_date - request.start_date).days
+        
+        for day in range(duration_days):
             current_date = request.start_date + timedelta(days=day)
-            day_activities = activities[day:day+2] if day < len(activities) else []  # 1-2 activities per day
+            # Distribute activities across days (1-2 activities per day)
+            day_activities = activities[day:day+2] if activities and day < len(activities) else []
+            
+            # Create detailed activity info for this day
+            day_activity_details = []
+            day_cost = Decimal("0")
+            
+            for activity in day_activities:
+                day_activity_details.append({
+                    "name": activity.name,
+                    "type": activity.type,
+                    "description": activity.description,
+                    "price": float(activity.price),
+                    "duration": activity.duration,
+                    "rating": activity.rating,
+                    "location": activity.location
+                })
+                day_cost += activity.price
             
             schedule.append({
                 "date": current_date.isoformat(),
                 "day_number": day + 1,
-                "activities": [{"name": act.name, "duration": act.duration} for act in day_activities],
-                "estimated_cost": sum(act.price for act in day_activities)
+                "activities": day_activity_details,
+                "estimated_cost": float(day_cost)
             })
-        
+            
         return schedule
     
     async def _find_flights(self, request: TravelRequest, budget: Decimal) -> List[FlightOption]:

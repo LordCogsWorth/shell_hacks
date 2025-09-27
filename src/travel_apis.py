@@ -231,6 +231,10 @@ class HotelBookingAPI:
             print(f"🔍 Searching hotels in {city_code} ({params.destination})")
             print(f"📅 Check-in: {check_in_date}, Check-out: {check_out_date}")
             
+            if not self.amadeus_client:
+                print("⚠️  Amadeus client not available")
+                return await self._mock_hotel_search(params)
+                
             response = self.amadeus_client.reference_data.locations.hotels.by_city.get(
                 cityCode=city_code
             )
@@ -243,6 +247,9 @@ class HotelBookingAPI:
                     
                     try:
                         # Get hotel offers
+                        if not self.amadeus_client:
+                            continue
+                        print(f"🏨 Getting offers for hotel {hotel_id}...")
                         offers_response = self.amadeus_client.shopping.hotel_offers_search.get(
                             hotelIds=hotel_id,
                             checkInDate=check_in_date,
@@ -306,8 +313,10 @@ class HotelBookingAPI:
     
     async def _get_city_code(self, destination: str) -> str:
         """Get IATA city code for hotel search"""
-        print(f"🗺️  Resolving city code for destination: '{destination}'")
-        
+        return self._fallback_city_code_resolution(destination)
+    
+    def _fallback_city_code_resolution(self, destination: str) -> str:
+        """Fallback city code resolution using hardcoded mapping"""
         # Expanded city mappings for better coverage
         city_mapping = {
             # Major European Cities
@@ -482,42 +491,43 @@ class HotelBookingAPI:
                 return code
                 
         # If not found in mapping, try to get from Amadeus Location API
-        print(f"🔍 Searching Amadeus Location API for: '{destination}'")
-        try:
-            response = self.amadeus_client.reference_data.locations.get(
-                keyword=destination.strip(),
-                subType='CITY',
-                page={'limit': 5}
-            )
-            if response.data and len(response.data) > 0:
-                best_match = response.data[0]
-                city_code = best_match.get('iataCode')
-                city_name = best_match.get('name', 'Unknown')
-                print(f"✅ Amadeus API found: '{city_name}' → {city_code}")
-                return city_code
-            else:
-                print(f"❌ No results from Amadeus Location API for '{destination}'")
-        except Exception as e:
-            print(f"❌ Amadeus Location API error for '{destination}': {e}")
-            
-        # Try a simpler keyword search if the full destination failed
-        simple_keyword = clean_dest.split(',')[0].split(' ')[0].strip()
-        if simple_keyword != clean_dest and len(simple_keyword) > 2:
-            print(f"🔄 Trying simplified search with: '{simple_keyword}'")
+        if self.amadeus_client:
+            print(f"🔍 Searching Amadeus Location API for: '{destination}'")
             try:
                 response = self.amadeus_client.reference_data.locations.get(
-                    keyword=simple_keyword,
+                    keyword=destination.strip(),
                     subType='CITY',
-                    page={'limit': 3}
+                    page={'limit': 5}
                 )
                 if response.data and len(response.data) > 0:
                     best_match = response.data[0]
                     city_code = best_match.get('iataCode')
                     city_name = best_match.get('name', 'Unknown')
-                    print(f"✅ Simplified search found: '{city_name}' → {city_code}")
+                    print(f"✅ Amadeus API found: '{city_name}' → {city_code}")
                     return city_code
+                else:
+                    print(f"❌ No results from Amadeus Location API for '{destination}'")
             except Exception as e:
-                print(f"❌ Simplified search failed: {e}")
+                print(f"❌ Amadeus Location API error for '{destination}': {e}")
+                
+            # Try a simpler keyword search if the full destination failed
+            simple_keyword = clean_dest.split(',')[0].split(' ')[0].strip()
+            if simple_keyword != clean_dest and len(simple_keyword) > 2:
+                print(f"🔄 Trying simplified search with: '{simple_keyword}'")
+                try:
+                    response = self.amadeus_client.reference_data.locations.get(
+                        keyword=simple_keyword,
+                        subType='CITY',
+                        page={'limit': 3}
+                    )
+                    if response.data and len(response.data) > 0:
+                        best_match = response.data[0]
+                        city_code = best_match.get('iataCode')
+                        city_name = best_match.get('name', 'Unknown')
+                        print(f"✅ Simplified search found: '{city_name}' → {city_code}")
+                        return city_code
+                except Exception as e:
+                    print(f"❌ Simplified search failed: {e}")
             
         # Final fallback - use first 3 letters of destination as city code
         fallback_code = clean_dest[:3].upper()
@@ -587,23 +597,120 @@ class HotelBookingAPI:
 
 
 class ActivityBookingAPI:
-    """Integration with activity booking APIs (GetYourGuide, Viator, etc.)"""
+    """Integration with TripAdvisor and other activity booking APIs"""
     
     def __init__(self):
+        # Load environment variables
+        from dotenv import load_dotenv
+        load_dotenv()
+        
+        # TripAdvisor API configuration
+        self.tripadvisor_key = os.getenv("TRIPADVISOR_API_KEY")
+        self.tripadvisor_base_url = "https://api.content.tripadvisor.com/api/v1"
+        
+        # Other API keys
         self.getyourguide_key = os.getenv("GETYOURGUIDE_API_KEY", "test_key")
         self.viator_key = os.getenv("VIATOR_API_KEY", "test_key")
+        
+        if self.tripadvisor_key:
+            print("✅ TripAdvisor API key configured successfully")
+        else:
+            print("⚠️  TripAdvisor API key not found. Using mock data.")
+            print("   Set TRIPADVISOR_API_KEY in .env file")
     
     async def search_activities(self, destination: str, max_budget: Decimal, preferences: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Search for activities and tours"""
+        """Search for activities and attractions using TripAdvisor API"""
         try:
-            # For development, return mock data
-            # In production, integrate with GetYourGuide/Viator APIs
-            return await self._mock_activity_search(destination, max_budget, preferences or [])
-            
+            if self.tripadvisor_key:
+                print(f"🎯 Searching activities in {destination} via TripAdvisor API...")
+                return await self._tripadvisor_activity_search(destination, max_budget, preferences or [])
+            else:
+                print("🎯 Using mock activity data (TripAdvisor API not configured)")
+                return await self._mock_activity_search(destination, max_budget, preferences or [])
+                
         except Exception as e:
-            print(f"Activity search error: {e}")
+            print(f"❌ Activity search error: {e}")
+            print("🎯 Falling back to mock activity data")
             return await self._mock_activity_search(destination, max_budget, preferences or [])
-    
+
+    async def _tripadvisor_activity_search(self, destination: str, max_budget: Decimal, preferences: List[str]) -> List[Dict[str, Any]]:
+        """Search TripAdvisor for real attractions and things to do"""
+        try:
+            headers = {
+                "accept": "application/json",
+                "X-RapidAPI-Key": self.tripadvisor_key,
+                "X-RapidAPI-Host": "tripadvisor16.p.rapidapi.com"
+            }
+            
+            # Step 1: Search for location ID using proper location search
+            location_url = "https://tripadvisor16.p.rapidapi.com/api/v1/attraction/searchLocation"
+            location_params = {"query": f"things to do in {destination}"}
+            
+            print(f"🔍 Searching TripAdvisor for things to do in: {destination}")
+            async with httpx.AsyncClient() as client:
+                location_response = await client.get(location_url, headers=headers, params=location_params)
+                location_data = location_response.json()
+                
+                if not location_data.get("data"):
+                    print(f"⚠️  No TripAdvisor location found for {destination}")
+                    return await self._mock_activity_search(destination, max_budget, preferences)
+                
+                location_id = location_data["data"][0]["locationId"]
+                print(f"✅ Found TripAdvisor location ID: {location_id}")
+                
+                # Step 2: Get things to do / attractions for the location
+                attractions_url = "https://tripadvisor16.p.rapidapi.com/api/v1/attraction/searchAttractions"
+                attractions_params = {"locationId": location_id}
+                
+                attractions_response = await client.get(attractions_url, headers=headers, params=attractions_params)
+                attractions_data = attractions_response.json()
+                
+                activities = []
+                if attractions_data.get("data", {}).get("data"):
+                    for attraction in attractions_data["data"]["data"][:8]:  # Limit to 8 activities
+                        # Generate realistic pricing based on activity type and budget
+                        base_price = float(max_budget) * 0.15  # 15% of budget per activity
+                        price_variation = base_price * 0.5  # ±50% variation
+                        price = max(10, base_price + (hash(attraction.get("name", "")) % 100 - 50) / 100 * price_variation)
+                        
+                        activity = {
+                            "name": attraction.get("name", "Unknown Activity"),
+                            "type": attraction.get("primaryInfo", "Attraction"),
+                            "description": attraction.get("secondaryInfo", "Popular local attraction"),
+                            "location": destination,
+                            "price": round(price, 2),
+                            "duration": self._estimate_duration(attraction.get("primaryInfo", "")),
+                            "rating": float(attraction.get("averageRating", 4.0)),
+                            "image_url": attraction.get("cardPhoto", {}).get("sizes", {}).get("urlTemplate", "").replace("{width}", "300").replace("{height}", "200") if attraction.get("cardPhoto") else None,
+                            "tripadvisor_url": f"https://www.tripadvisor.com{attraction.get('detailsV2', {}).get('url', '')}" if attraction.get('detailsV2') else None,
+                            "source": "tripadvisor"
+                        }
+                        
+                        # Filter by budget
+                        if activity["price"] <= float(max_budget):
+                            activities.append(activity)
+                
+                print(f"✅ Found {len(activities)} TripAdvisor activities within budget")
+                return activities[:6]  # Return top 6 activities
+                
+        except Exception as e:
+            print(f"❌ TripAdvisor API error: {e}")
+            return await self._mock_activity_search(destination, max_budget, preferences)
+
+    def _estimate_duration(self, activity_type: str) -> str:
+        """Estimate activity duration based on type"""
+        activity_type = activity_type.lower()
+        if any(word in activity_type for word in ["museum", "gallery", "exhibit"]):
+            return "2-3 hours"
+        elif any(word in activity_type for word in ["tour", "walking", "guide"]):
+            return "3-4 hours"
+        elif any(word in activity_type for word in ["park", "garden", "outdoor"]):
+            return "1-2 hours"
+        elif any(word in activity_type for word in ["restaurant", "food", "dining"]):
+            return "1-1.5 hours"
+        else:
+            return "2-3 hours"
+
     async def _mock_activity_search(self, destination: str, max_budget: Decimal, preferences: List[str]) -> List[Dict[str, Any]]:
         """Mock activity search results for development"""
         await asyncio.sleep(0.4)  # Simulate API delay

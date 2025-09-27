@@ -1,52 +1,66 @@
-INFO:     Will watch for changes in these directories: ['/Users/kyleprice/Desktop/shell_hacks']
+INFO:     Started server process [69145]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [14193] using StatReload
-INFO:     Started server process [14236]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:53589 - "POST /api/plan-trip HTTP/1.1" 422 Unprocessable Entity
-WARNING:  StatReload detected changes in 'test_http_api.py'. Reloading...
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+🌍 Planning trip to Paris for 1 travelers
+💰 Budget: $2000, Dates: 2024-06-01 to 2024-06-04
+🏨 Searching hotels in Paris via Amadeus API...
+✅ Found exact match: 'paris' → PAR
+🔍 Searching hotels in PAR (Paris)
+📅 Check-in: 2024-06-01, Check-out: 2024-06-04
+🏨 Getting offers for hotel XKPAR120...
+⚠️  Could not get offers for hotel XKPAR120: [400]
+
+🏨 Getting offers for hotel RTPAREIF...
+⚠️  Could not get offers for hotel RTPAREIF: [400]
+
+🏨 Getting offers for hotel RTPARFAY...
+⚠️  Could not get offers for hotel RTPARFAY: [400]
+
+🏨 Getting offers for hotel BWPAR160...
+⚠️  Could not get offers for hotel BWPAR160: [400]
+
+🏨 Getting offers for hotel BRPARVDB...
+⚠️  Could not get offers for hotel BRPARVDB: [400]
+
+ℹ️  No hotels found via Amadeus API, using mock data
+🎯 Searching activities in Paris via TripAdvisor API...
+🔍 Searching TripAdvisor for things to do in: Paris
+⚠️  No TripAdvisor location found for Paris
+🎯 AI Agent selected 1 activities for your trip:
+   1. Paris Museum and Art Gallery Pass - $60 (Full day)
+INFO:     127.0.0.1:55769 - "POST /api/plan-trip HTTP/1.1" 200 OK
+🌍 Planning trip to Tokyo for 2 travelers
+💰 Budget: $3000, Dates: 2024-07-15 to 2024-07-20
+🏨 Searching hotels in Tokyo via Amadeus API...
+✅ Found exact match: 'tokyo' → TYO
+🔍 Searching hotels in TYO (Tokyo)
+📅 Check-in: 2024-07-15, Check-out: 2024-07-20
+🏨 Getting offers for hotel YXTYOHRT...
+⚠️  Could not get offers for hotel YXTYOHRT: [400]
+
+🏨 Getting offers for hotel UZTYO384...
+⚠️  Could not get offers for hotel UZTYO384: [400]
+
+🏨 Getting offers for hotel RZTYORZZ...
+⚠️  Could not get offers for hotel RZTYORZZ: [400]
+
+🏨 Getting offers for hotel FGTYOHKY...
+⚠️  Could not get offers for hotel FGTYOHKY: [400]
+
+🏨 Getting offers for hotel YHTYO298...
+⚠️  Could not get offers for hotel YHTYO298: [400]
+
+ℹ️  No hotels found via Amadeus API, using mock data
+🎯 Searching activities in Tokyo via TripAdvisor API...
+🔍 Searching TripAdvisor for things to do in: Tokyo
+⚠️  No TripAdvisor location found for Tokyo
+🎯 AI Agent selected 1 activities for your trip:
+   1. Tokyo Museum and Art Gallery Pass - $60 (Full day)
+INFO:     127.0.0.1:55790 - "POST /api/plan-trip HTTP/1.1" 200 OK
 INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
-INFO:     Finished server process [14236]
-INFO:     Started server process [14535]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:53592 - "POST /api/plan-trip HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53598 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53600 - "POST /api/plan-trip HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53634 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53642 - "GET / HTTP/1.1" 200 OK
-WARNING:  StatReload detected changes in 'src/travel_agent.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [14535]
-INFO:     Started server process [15655]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     127.0.0.1:53645 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53649 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53680 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53684 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53696 - "POST /api/plan-trip HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53720 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53723 - "POST /api/plan-trip HTTP/1.1" 422 Unprocessable Entity
-INFO:     127.0.0.1:53732 - "POST /api/plan-trip HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53745 - "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53746 - "GET /apple-touch-icon.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53747 - "GET /favicon.ico HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53745 - "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53746 - "GET /apple-touch-icon.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53747 - "GET /favicon.ico HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53745 - "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53746 - "GET /apple-touch-icon.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53747 - "GET /favicon.ico HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53745 - "GET /apple-touch-icon-precomposed.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53746 - "GET /apple-touch-icon.png HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53747 - "GET /favicon.ico HTTP/1.1" 404 Not Found
-INFO:     127.0.0.1:53754 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53771 - "GET / HTTP/1.1" 200 OK
-INFO:     127.0.0.1:53782 - "POST /api/plan-trip HTTP/1.1" 422 Unprocessable Entity
-INFO:     127.0.0.1:53786 - "POST /api/plan-trip HTTP/1.1" 200 OK
+INFO:     Finished server process [69145]
