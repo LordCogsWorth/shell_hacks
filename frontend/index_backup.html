@@ -126,7 +126,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect } = React;
 
         // Main App Component
         function TravelMasterApp() {
@@ -144,26 +144,6 @@
             const [isLoading, setIsLoading] = useState(false);
             const [itinerary, setItinerary] = useState(null);
             const [isListening, setIsListening] = useState(false);
-
-            // Create refs for inputs to prevent focus loss
-            const destinationRef = useRef(null);
-            const departureRef = useRef(null);
-            const budgetRef = useRef(null);
-            const specialRequirementsRef = useRef(null);
-
-            // Handle form submission by reading from refs
-            const getFormData = () => {
-                return {
-                    destination: destinationRef.current?.value || travelRequest.destination,
-                    departure_location: departureRef.current?.value || travelRequest.departure_location,
-                    start_date: travelRequest.start_date,
-                    end_date: travelRequest.end_date,
-                    budget: budgetRef.current ? parseFloat(budgetRef.current.value) || 0 : travelRequest.budget,
-                    travelers: travelRequest.travelers,
-                    preferences: travelRequest.preferences,
-                    special_requirements: specialRequirementsRef.current?.value || travelRequest.special_requirements
-                };
-            };
 
             // Voice Recognition Setup
             const startVoiceRecognition = () => {
@@ -258,13 +238,12 @@
             const planTrip = async () => {
                 setIsLoading(true);
                 try {
-                    const formData = getFormData();
                     const response = await fetch('http://localhost:8000/api/plan-trip', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify(formData),
+                        body: JSON.stringify(travelRequest),
                     });
 
                     if (response.ok) {
@@ -307,11 +286,10 @@
                                 <i className="fas fa-map-marker-alt mr-2"></i>Destination
                             </label>
                             <input
-                                ref={destinationRef}
                                 type="text"
-                                defaultValue={travelRequest.destination}
+                                value={travelRequest.destination}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, destination: e.target.value })}
                                 placeholder="Where do you want to go?"
-                                autoComplete="off"
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -322,11 +300,10 @@
                                 <i className="fas fa-plane-departure mr-2"></i>Departure Location
                             </label>
                             <input
-                                ref={departureRef}
                                 type="text"
-                                defaultValue={travelRequest.departure_location}
+                                value={travelRequest.departure_location}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, departure_location: e.target.value })}
                                 placeholder="Where are you leaving from?"
-                                autoComplete="off"
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -339,7 +316,7 @@
                             <input
                                 type="date"
                                 value={travelRequest.start_date}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, start_date: e.target.value }))}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, start_date: e.target.value })}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -352,7 +329,7 @@
                             <input
                                 type="date"
                                 value={travelRequest.end_date}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, end_date: e.target.value }))}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, end_date: e.target.value })}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                         </div>
@@ -363,9 +340,9 @@
                                 <i className="fas fa-dollar-sign mr-2"></i>Budget (USD)
                             </label>
                             <input
-                                ref={budgetRef}
                                 type="number"
-                                defaultValue={travelRequest.budget || ''}
+                                value={travelRequest.budget}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, budget: parseFloat(e.target.value) || 0 })}
                                 placeholder="Total budget"
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
@@ -378,7 +355,7 @@
                             </label>
                             <select
                                 value={travelRequest.travelers}
-                                onChange={(e) => setTravelRequest(prev => ({ ...prev, travelers: parseInt(e.target.value) }))}
+                                onChange={(e) => setTravelRequest({ ...travelRequest, travelers: parseInt(e.target.value) })}
                                 className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
                                 {[1, 2, 3, 4, 5, 6].map(num => (
@@ -399,12 +376,19 @@
                                     <input
                                         type="checkbox"
                                         checked={travelRequest.preferences.includes(pref)}
-                                        onChange={(e) => setTravelRequest(prev => ({
-                                            ...prev,
-                                            preferences: e.target.checked 
-                                                ? [...prev.preferences, pref]
-                                                : prev.preferences.filter(p => p !== pref)
-                                        }))}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setTravelRequest({
+                                                    ...travelRequest,
+                                                    preferences: [...travelRequest.preferences, pref]
+                                                });
+                                            } else {
+                                                setTravelRequest({
+                                                    ...travelRequest,
+                                                    preferences: travelRequest.preferences.filter(p => p !== pref)
+                                                });
+                                            }
+                                        }}
                                         className="mr-2"
                                     />
                                     <span className="text-gray-700 capitalize">{pref.replace('_', ' ')}</span>
@@ -419,8 +403,8 @@
                             <i className="fas fa-info-circle mr-2"></i>Special Requirements
                         </label>
                         <textarea
-                            ref={specialRequirementsRef}
-                            defaultValue={travelRequest.special_requirements}
+                            value={travelRequest.special_requirements}
+                            onChange={(e) => setTravelRequest({ ...travelRequest, special_requirements: e.target.value })}
                             placeholder="Any special requests or requirements?"
                             rows="3"
                             className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -432,8 +416,8 @@
                         <button
                             onClick={startVoiceRecognition}
                             className={`px-8 py-4 rounded-lg font-semibold transition-all shadow-lg ${isListening
-                                ? 'bg-red-500 text-white voice-pulse'
-                                : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
+                                    ? 'bg-red-500 text-white voice-pulse'
+                                    : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
                                 }`}
                         >
                             <i className={`fas ${isListening ? 'fa-stop' : 'fa-microphone'} mr-2`}></i>

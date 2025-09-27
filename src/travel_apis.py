@@ -7,7 +7,7 @@ including flights, hotels, and activities.
 
 import asyncio
 import httpx
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 from datetime import datetime, date
 from decimal import Decimal
 import os
@@ -41,6 +41,46 @@ class FlightBookingAPI:
         self.amadeus_secret = os.getenv("AMADEUS_API_SECRET", "test_secret")
         self.base_url = "https://test.api.amadeus.com"
         self.access_token = None
+        
+        # Airport mapping for common destinations
+        self.airport_codes = {
+            "paris": "CDG",
+            "london": "LHR", 
+            "tokyo": "NRT",
+            "new york": "JFK",
+            "los angeles": "LAX",
+            "barcelona": "BCN",
+            "rome": "FCO",
+            "amsterdam": "AMS",
+            "berlin": "BER",
+            "madrid": "MAD"
+        }
+        
+        self.airport_names = {
+            "CDG": "Charles de Gaulle Airport",
+            "LHR": "Heathrow Airport",
+            "NRT": "Narita International Airport", 
+            "JFK": "John F. Kennedy International Airport",
+            "LAX": "Los Angeles International Airport",
+            "BCN": "Barcelona-El Prat Airport",
+            "FCO": "Leonardo da Vinci-Fiumicino Airport",
+            "AMS": "Amsterdam Airport Schiphol",
+            "BER": "Berlin Brandenburg Airport",
+            "MAD": "Madrid-Barajas Airport"
+        }
+    
+    def _get_airport_code(self, location: str) -> str:
+        """Get airport code for a location"""
+        location_lower = location.lower()
+        for city, code in self.airport_codes.items():
+            if city in location_lower:
+                return code
+        return location[:3].upper()  # Fallback to first 3 letters
+    
+    def _get_airport_name(self, location: str) -> str:
+        """Get airport name for a location"""
+        code = self._get_airport_code(location)
+        return self.airport_names.get(code, f"{location} Airport")
     
     async def get_access_token(self) -> str:
         """Get OAuth access token for Amadeus API"""
@@ -75,8 +115,10 @@ class FlightBookingAPI:
                 "id": "flight_001",
                 "airline": "American Airlines",
                 "flight_number": "AA1234",
-                "departure_airport": params.origin,
-                "arrival_airport": params.destination,
+                "departure_airport": self._get_airport_code(params.origin),
+                "departure_airport_name": self._get_airport_name(params.origin),
+                "arrival_airport": self._get_airport_code(params.destination),
+                "arrival_airport_name": self._get_airport_name(params.destination),
                 "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=8)),
                 "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=14, minute=30)),
                 "duration": "6h 30m",
@@ -84,14 +126,17 @@ class FlightBookingAPI:
                 "price": base_price * Decimal("0.9"),
                 "currency": "USD",
                 "booking_class": "Economy",
-                "available_seats": 15
+                "available_seats": 15,
+                "aircraft": "Boeing 737-800"
             },
             {
                 "id": "flight_002", 
                 "airline": "Delta Air Lines",
                 "flight_number": "DL5678",
-                "departure_airport": params.origin,
-                "arrival_airport": params.destination,
+                "departure_airport": self._get_airport_code(params.origin),
+                "departure_airport_name": self._get_airport_name(params.origin),
+                "arrival_airport": self._get_airport_code(params.destination),
+                "arrival_airport_name": self._get_airport_name(params.destination),
                 "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=12)),
                 "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=20, minute=45)),
                 "duration": "8h 45m",
@@ -99,14 +144,17 @@ class FlightBookingAPI:
                 "price": base_price * Decimal("0.75"),
                 "currency": "USD",
                 "booking_class": "Economy",
-                "available_seats": 8
+                "available_seats": 8,
+                "aircraft": "Airbus A320"
             },
             {
                 "id": "flight_003",
                 "airline": "United Airlines", 
                 "flight_number": "UA9012",
-                "departure_airport": params.origin,
-                "arrival_airport": params.destination,
+                "departure_airport": self._get_airport_code(params.origin),
+                "departure_airport_name": self._get_airport_name(params.origin),
+                "arrival_airport": self._get_airport_code(params.destination),
+                "arrival_airport_name": self._get_airport_name(params.destination),
                 "departure_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=15)),
                 "arrival_time": datetime.combine(params.departure_date, datetime.min.time().replace(hour=21, minute=15)),
                 "duration": "6h 15m",
@@ -114,7 +162,8 @@ class FlightBookingAPI:
                 "price": base_price * Decimal("1.1"),
                 "currency": "USD", 
                 "booking_class": "Economy Plus",
-                "available_seats": 22
+                "available_seats": 22,
+                "aircraft": "Boeing 777-300ER"
             }
         ]
 
@@ -348,10 +397,15 @@ class TravelAPIManager:
             return_exceptions=True
         )
         
+        # Handle results with proper typing
+        flights = cast(List[Dict[str, Any]], results[0] if not isinstance(results[0], Exception) else [])
+        hotels = cast(List[Dict[str, Any]], results[1] if not isinstance(results[1], Exception) else [])
+        activities = cast(List[Dict[str, Any]], results[2] if not isinstance(results[2], Exception) else [])
+        
         return {
-            "flights": results[0] if not isinstance(results[0], Exception) else [],
-            "hotels": results[1] if not isinstance(results[1], Exception) else [],
-            "activities": results[2] if not isinstance(results[2], Exception) else []
+            "flights": flights,
+            "hotels": hotels, 
+            "activities": activities
         }
 
 
