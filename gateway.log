@@ -1,0 +1,49 @@
+INFO:     Started server process [67875]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+✅ Frontend mounted from: /Users/kyleprice/Desktop/shell_hacks/frontend
+🚀 Starting TravelMaster API Gateway...
+📡 Connecting to A2A agents:
+   • Flight Agent: http://localhost:8001
+   • Hotel Agent: http://localhost:8002
+   • Activity Agent: http://localhost:8003
+   • Gemini Agent: http://localhost:8004
+   • Discovery Agent: http://localhost:8005
+🌐 Frontend will be available at: http://localhost:8000/frontend/
+📋 API status at: http://localhost:8000/api/agents/status
+INFO:     127.0.0.1:64903 - "HEAD /frontend/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64906 - "GET /frontend/ HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64910 - "GET /?code=_WpwjWUbgMa0goc5xbbuo7DXZwwlCcaKMufEGUcQ9P6Vb&state=M2hjOURmQi1LUVFDcGJmUTRMeU1iOXFLcn5pa1FLaC1icmRsbnBSbHVkLQ%3D%3D HTTP/1.1" 200 OK
+Agent http://localhost:8005 returned 404: {"detail":"Not Found"}
+🔍 Discovered 0 agents
+Agent http://localhost:8001 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8002 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8003 returned 404: {"detail":"Not Found"}
+✅ Trip planned successfully - Total cost: $150.00, Savings: $2850.00
+INFO:     127.0.0.1:64916 - "POST /api/plan-trip HTTP/1.1" 200 OK
+Agent http://localhost:8004 returned 404: {"detail":"Not Found"}
+⚠️ Gemini agent unavailable, providing fallback itinerary
+INFO:     127.0.0.1:64916 - "POST /api/generate-itinerary HTTP/1.1" 200 OK
+Agent http://localhost:8005 returned 404: {"detail":"Not Found"}
+🔍 Discovered 0 agents
+Agent http://localhost:8001 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8002 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8003 returned 404: {"detail":"Not Found"}
+✅ Trip planned successfully - Total cost: $750.00, Savings: $2250.00
+INFO:     127.0.0.1:64932 - "POST /api/plan-trip HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64945 - "GET / HTTP/1.1" 200 OK
+Agent http://localhost:8005 returned 404: {"detail":"Not Found"}
+🔍 Discovered 0 agents
+Agent http://localhost:8001 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8003 returned 404: {"detail":"Not Found"}
+Agent http://localhost:8002 returned 404: {"detail":"Not Found"}
+✅ Trip planned successfully - Total cost: $150.00, Savings: $2850.00
+INFO:     127.0.0.1:64957 - "POST /api/plan-trip HTTP/1.1" 200 OK
+Agent http://localhost:8004 returned 404: {"detail":"Not Found"}
+⚠️ Gemini agent unavailable, providing fallback itinerary
+INFO:     127.0.0.1:64957 - "POST /api/generate-itinerary HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [67875]

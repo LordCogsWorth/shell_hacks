@@ -1,0 +1,169 @@
+🚀 Starting Shell Hacks A2A Agent Ecosystem...
+================================================
+🛩️  Starting FlightBookingAgent on port 8001...
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Connected to real flight APIs (Amadeus)
+✈️ FlightBookingAgent starting...
+🔍 Specialized in flight search and booking
+💰 Supports price negotiation with other agents
+📍 Available at: http://localhost:8001
+🤖 Agent info: http://localhost:8001/.well-known/agent
+🔗 API endpoints: http://localhost:8001/api/
+INFO:     Started server process [78355]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+🏨 Starting HotelBookingAgent on port 8002...
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Connected to real hotel APIs
+🏨 HotelBookingAgent starting...
+🔍 Specialized in hotel search and booking
+💰 Supports budget negotiation with other agents
+⬆️ Handles room upgrades and optimization
+📍 Available at: http://localhost:8002
+🤖 Agent info: http://localhost:8002/.well-known/agent
+🔗 API endpoints: http://localhost:8002/api/
+INFO:     Started server process [78365]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8002 (Press CTRL+C to quit)
+🎯 Starting ActivityPlanningAgent on port 8003...
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Amadeus credentials detected — using Amadeus for flight searches
+✅ Amadeus API client initialized successfully
+✅ TripAdvisor API key configured successfully
+✅ Google Places API credentials detected — using real restaurant data
+✅ Connected to real activity APIs (Google Places, TripAdvisor)
+🎯 ActivityPlanningAgent starting...
+🍽️ Specialized in activities and restaurant planning
+📅 Supports schedule optimization and timing coordination
+🤝 Collaborates with hotel and flight agents
+📍 Available at: http://localhost:8003
+🤖 Agent info: http://localhost:8003/.well-known/agent
+🔗 API endpoints: http://localhost:8003/api/
+INFO:     Started server process [78369]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8003 (Press CTRL+C to quit)
+🧠 Starting GeminiAIAgent on port 8004...
+INFO:     Started server process [78900]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8004 (Press CTRL+C to quit)
+🔍 Starting AgentDiscoveryService on port 8005...
+
+⏳ Waiting for agents to initialize...
+INFO:     Started server process [78904]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8005 (Press CTRL+C to quit)
+🔍 AgentDiscoveryService starting...
+🤖 A2A Protocol ecosystem discovery and coordination
+🔗 Agent capability matching and communication testing
+📊 Real-time ecosystem health monitoring
+🤝 Multi-agent coordination planning
+📍 Available at: http://localhost:8005
+🤖 Service info: http://localhost:8005/.well-known/agent
+🔗 API endpoints: http://localhost:8005/api/
+INFO:     127.0.0.1:65270 - "POST /discover_all_agents HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:65275 - "POST /api/search-flights HTTP/1.1" 200 OK
+🎯 Searching activities in Paris via TripAdvisor API...
+🔍 Searching TripAdvisor for diverse activities in: Paris
+⚠️  No diverse activities found, using enhanced mock data
+INFO:     127.0.0.1:65276 - "POST /api/search-activities HTTP/1.1" 200 OK
+
+🔍 Testing Agent Discovery...
+INFO:     127.0.0.1:65285 - "GET /.well-known/agent HTTP/1.1" 200 OK
+⚠️ Failed to discover agent at http://localhost:8002: 
+INFO:     127.0.0.1:65293 - "GET /.well-known/agent HTTP/1.1" 200 OK
+✅ Gemini AI agent initialized with full AI capabilities
+🧠 GeminiAIAgent starting...
+🤖 AI-powered itinerary generation and optimization
+🚨 Advanced disruption handling with intelligent alternatives
+💡 Local insights and personalized recommendations
+🤝 Full A2A protocol compliance for agent coordination
+📍 Available at: http://localhost:8004
+🤖 Agent info: http://localhost:8004/.well-known/agent
+🔗 API endpoints: http://localhost:8004/api/
+INFO:     127.0.0.1:65295 - "GET /.well-known/agent HTTP/1.1" 200 OK
+⚠️ Failed to discover agent at http://localhost:8000: Client error '404 Not Found' for url 'http://localhost:8000/.well-known/agent'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
+INFO:     127.0.0.1:65281 - "POST /api/discover-agents HTTP/1.1" 200 OK
+✅ Discovery Success: 3 agents found
+📊 Ecosystem Health: 60.0%
+   🤖 FlightBookingAgent - 4 capabilities
+   🤖 ActivityPlanningAgent - 6 capabilities
+   🤖 GeminiAIAgent - 7 capabilities
+
+� Starting Frontend Web Server...
+
+🎉 Complete Travel System is Ready!
+====================================
+🌐 Frontend Website:      http://localhost:8000/frontend/
+
+🤖 A2A Agent Ecosystem:
+🛩️  FlightBookingAgent:    http://localhost:8001
+🏨 HotelBookingAgent:     http://localhost:8002
+🎯 ActivityPlanningAgent: http://localhost:8003
+🧠 GeminiAIAgent:         http://localhost:8004
+🔍 AgentDiscoveryService: http://localhost:8005
+
+🚀 Ready for hackathon demo!
+💡 Open http://localhost:8000/frontend/ to use the app
+
+To stop everything: pkill -f 'python'
+🏨 Searching hotels in Paris via Amadeus API...
+✅ Found exact match: 'paris' → PAR
+🔍 Searching hotels in PAR (Paris)
+📅 Check-in: 2025-09-28, Check-out: 2025-09-30
+🏨 Getting offers for hotel FGPARPAL...
+✅ Found: HOTEL PRINCE ALBERT LOUVRE - $145.00/night
+🏨 Getting offers for hotel HNPARKGU...
+✅ Found: Test Property - $46.00/night
+🏨 Getting offers for hotel BWPAR160...
+✅ Found: Best Western Gaillon Opera - $162.30/night
+🏨 Getting offers for hotel BWPAR789...
+⚠️  Could not get offers for hotel BWPAR789: [400]
+[hotelIds=BWPAR789] Provider Error - NO ROOMS AVAILABLE AT REQUESTED PROPERTY
+🏨 Getting offers for hotel RTPARMAI...
+✅ Found: ibis Paris Tour Montparnasse 15ème - $90.80/night
+🏨 Found 4 hotels via Amadeus API
+INFO:     127.0.0.1:65274 - "POST /api/search-hotels HTTP/1.1" 200 OK
+INFO:     127.0.0.1:65287 - "GET /.well-known/agent HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [78369]
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [78900]
+INFO:     Waiting for application shutdown.
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Application shutdown complete.
+INFO:     Waiting for application shutdown.
+INFO:     Finished server process [78365]
+INFO:     Finished server process [78355]
+INFO:     Application shutdown complete.
+INFO:     Finished server process [78904]
