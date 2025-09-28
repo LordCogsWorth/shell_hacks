@@ -1,7 +1,12 @@
+# Temporarily disabled - fix repository settings first
+# on:
+#   push:
+#     branches:
+#       - main
+
+# Manual trigger only for now
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
