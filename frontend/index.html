@@ -432,6 +432,50 @@
             }
         }
 
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeOut {
+            0% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        @keyframes slideInFromTop {
+            0% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-50px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        @keyframes slideOutToTop {
+            0% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-50px);
+            }
+        }
+
         .hotel-image,
         .destination-image {
             width: 100%;
@@ -2328,6 +2372,7 @@
             // Boarding Pass Functions
             const showBoardingPass = (flight, tripData) => {
                 const modal = document.createElement('div');
+                modal.id = 'boarding-pass-modal';
                 modal.style.cssText = `
                     position: fixed;
                     top: 0;
@@ -2339,7 +2384,37 @@
                     display: flex;
                     justify-content: center;
                     align-items: center;
+                    animation: fadeIn 0.3s ease-out;
                 `;
+
+                // Close modal function
+                const closeBoardingPass = () => {
+                    modal.style.animation = 'fadeOut 0.3s ease-in';
+                    setTimeout(() => {
+                        if (modal.parentNode) {
+                            modal.parentNode.removeChild(modal);
+                        }
+                    }, 300);
+                };
+
+                // Make close function globally accessible
+                window.closeBoardingPass = closeBoardingPass;
+
+                // Close on backdrop click
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        closeBoardingPass();
+                    }
+                });
+
+                // Close on escape key
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') {
+                        closeBoardingPass();
+                        document.removeEventListener('keydown', handleEscape);
+                    }
+                };
+                document.addEventListener('keydown', handleEscape);
 
                 const flightNumber = flight.flight_id || 'SH' + Math.floor(Math.random() * 9000 + 1000);
                 const gate = String.fromCharCode(65 + Math.floor(Math.random() * 10)) + Math.floor(Math.random() * 20 + 1);
@@ -2420,19 +2495,41 @@
                                 <p style="margin: 0; color: #6b7280; font-size: 0.8rem;">📱 Tap barcode to scan • Valid for mobile boarding</p>
                             </div>
 
-                            <button onclick="this.closest('[style*=\'position: fixed\']').remove()" style="
-                                width: 100%;
-                                padding: 1rem;
-                                background: linear-gradient(135deg, #3b82f6, #1e40af);
-                                color: white;
-                                border: none;
-                                border-radius: 12px;
-                                font-size: 1.1rem;
-                                font-weight: bold;
-                                cursor: pointer;
-                            ">
-                                Close Boarding Pass
-                            </button>
+                            <div style="display: flex; gap: 1rem;">
+                                <button onclick="closeBoardingPass()" style="
+                                    flex: 1;
+                                    padding: 1rem;
+                                    background: linear-gradient(135deg, #3b82f6, #1e40af);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 12px;
+                                    font-size: 1.1rem;
+                                    font-weight: bold;
+                                    cursor: pointer;
+                                    transition: transform 0.2s ease;
+                                " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                                    <i class="fas fa-times mr-2"></i>Close Boarding Pass
+                                </button>
+                                <button onclick="
+                                    const feedback = document.createElement('div');
+                                    feedback.textContent = '📱 Boarding pass saved to mobile wallet!';
+                                    feedback.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(34, 197, 94, 0.95); color: white; padding: 1rem 2rem; border-radius: 12px; font-weight: bold; z-index: 3000; animation: slideInFromTop 0.5s ease-out, slideOutToTop 0.5s ease-in 2.5s both;';
+                                    document.body.appendChild(feedback);
+                                    setTimeout(() => feedback.remove(), 3000);
+                                " style="
+                                    padding: 1rem;
+                                    background: linear-gradient(135deg, #10b981, #059669);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 12px;
+                                    font-size: 1rem;
+                                    font-weight: bold;
+                                    cursor: pointer;
+                                    transition: transform 0.2s ease;
+                                " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                                    <i class="fas fa-mobile-alt"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -2443,6 +2540,7 @@
             // Event Ticket Functions
             const showEventTicket = (activity, date) => {
                 const modal = document.createElement('div');
+                modal.id = 'event-ticket-modal';
                 modal.style.cssText = `
                     position: fixed;
                     top: 0;
@@ -2454,7 +2552,37 @@
                     display: flex;
                     justify-content: center;
                     align-items: center;
+                    animation: fadeIn 0.3s ease-out;
                 `;
+
+                // Close modal function
+                const closeEventTicket = () => {
+                    modal.style.animation = 'fadeOut 0.3s ease-in';
+                    setTimeout(() => {
+                        if (modal.parentNode) {
+                            modal.parentNode.removeChild(modal);
+                        }
+                    }, 300);
+                };
+
+                // Make close function globally accessible
+                window.closeEventTicket = closeEventTicket;
+
+                // Close on backdrop click
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        closeEventTicket();
+                    }
+                });
+
+                // Close on escape key
+                const handleEscape = (e) => {
+                    if (e.key === 'Escape') {
+                        closeEventTicket();
+                        document.removeEventListener('keydown', handleEscape);
+                    }
+                };
+                document.addEventListener('keydown', handleEscape);
 
                 const ticketId = '#SH' + Math.floor(Math.random() * 900000 + 100000);
                 const time = Math.floor(Math.random() * 12 + 1) + ':' + (Math.floor(Math.random() * 2) ? '00' : '30') + ' ' + (Math.random() > 0.5 ? 'PM' : 'AM');
@@ -2522,19 +2650,41 @@
                                 <p style="margin: 0; color: #6b7280; font-size: 0.8rem;">📱 Tap to verify • ID: ${Math.random().toString(36).substring(2, 15).toUpperCase()}</p>
                             </div>
 
-                            <button onclick="this.closest('[style*=\'position: fixed\']').remove()" style="
-                                width: 100%;
-                                padding: 1rem;
-                                background: linear-gradient(135deg, #10b981, #059669);
-                                color: white;
-                                border: none;
-                                border-radius: 12px;
-                                font-size: 1.1rem;
-                                font-weight: bold;
-                                cursor: pointer;
-                            ">
-                                Close Ticket
-                            </button>
+                            <div style="display: flex; gap: 1rem;">
+                                <button onclick="closeEventTicket()" style="
+                                    flex: 1;
+                                    padding: 1rem;
+                                    background: linear-gradient(135deg, #10b981, #059669);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 12px;
+                                    font-size: 1.1rem;
+                                    font-weight: bold;
+                                    cursor: pointer;
+                                    transition: transform 0.2s ease;
+                                " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                                    <i class="fas fa-times mr-2"></i>Close Ticket
+                                </button>
+                                <button onclick="
+                                    const feedback = document.createElement('div');
+                                    feedback.textContent = '🎫 Ticket saved to wallet!';
+                                    feedback.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(245, 158, 11, 0.95); color: white; padding: 1rem 2rem; border-radius: 12px; font-weight: bold; z-index: 3000; animation: slideInFromTop 0.5s ease-out, slideOutToTop 0.5s ease-in 2.5s both;';
+                                    document.body.appendChild(feedback);
+                                    setTimeout(() => feedback.remove(), 3000);
+                                " style="
+                                    padding: 1rem;
+                                    background: linear-gradient(135deg, #f59e0b, #d97706);
+                                    color: white;
+                                    border: none;
+                                    border-radius: 12px;
+                                    font-size: 1rem;
+                                    font-weight: bold;
+                                    cursor: pointer;
+                                    transition: transform 0.2s ease;
+                                " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                                    <i class="fas fa-wallet"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
