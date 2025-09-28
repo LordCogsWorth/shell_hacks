@@ -6,6 +6,15 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+  checks: write
+  deployments: write
+  issues: write
+  packages: write
+  pages: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 name: release-please
 
