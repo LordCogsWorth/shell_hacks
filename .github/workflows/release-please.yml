@@ -1,11 +1,25 @@
+# Temporarily disabled - fix repository settings first
+# on:
+#   push:
+#     branches:
+#       - main
+
+# Manual trigger only for now
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
+  actions: write
+  checks: write
+  deployments: write
+  issues: write
+  packages: write
+  pages: write
+  repository-projects: write
+  security-events: write
+  statuses: write
 
 name: release-please
 

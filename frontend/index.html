@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -406,9 +407,21 @@
         // Main App Component
         function TravelMasterApp() {
             // API Configuration
-            const API_BASE = 'http://localhost:8001';
-            
-            const [currentStep, setCurrentStep] = useState('trips');
+            const API_BASE = 'http://localhost:8000';
+
+            // Auth0 Configuration - SPA Application
+            const AUTH0_DOMAIN = 'dev-5sxkcuwmv28osx0h.us.auth0.com'; // Your Auth0 domain
+            const AUTH0_CLIENT_ID = 'UsjWQHn4crWHZaQHgbFqDPd6JNbIFbsI'; // Your SPA Client ID
+            const AUTH0_AUDIENCE = 'TravelAgent'; // Your API audience
+
+            // Authentication State
+            const [auth0Client, setAuth0Client] = useState(null);
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [user, setUser] = useState(null);
+            const [accessToken, setAccessToken] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+
+            const [currentStep, setCurrentStep] = useState('auth');
             const [travelRequest, setTravelRequest] = useState({
                 destination: '',
                 departure_location: '',
@@ -436,6 +449,89 @@
             const endDateRef = useRef(null);
             const travelersRef = useRef(null);
             const preferencesRef = useRef(new Set());
+
+            // Auth0 Initialization
+            useEffect(() => {
+                const initAuth0 = async () => {
+                    try {
+                        // Check if Auth0 credentials are configured
+                        if (AUTH0_DOMAIN === 'your-domain.auth0.com' || AUTH0_CLIENT_ID === 'your-client-id') {
+                            console.warn('Auth0 not configured - using demo mode');
+                            setAuthLoading(false);
+                            setCurrentStep('trips');
+                            return;
+                        }
+
+                        const auth0 = await window.auth0.createAuth0Client({
+                            domain: AUTH0_DOMAIN,
+                            clientId: AUTH0_CLIENT_ID,
+                            authorizationParams: {
+                                redirect_uri: window.location.origin,
+                                audience: AUTH0_AUDIENCE,
+                                scope: 'openid profile email'
+                            }
+                        });
+
+                        setAuth0Client(auth0);
+
+                        // Handle redirect callback
+                        if (window.location.search.includes('code=')) {
+                            await auth0.handleRedirectCallback();
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                        }
+
+                        // Check if user is authenticated
+                        const authenticated = await auth0.isAuthenticated();
+                        setIsAuthenticated(authenticated);
+
+                        if (authenticated) {
+                            const userProfile = await auth0.getUser();
+                            const token = await auth0.getTokenSilently();
+                            setUser(userProfile);
+                            setAccessToken(token);
+                            setCurrentStep('trips');
+                        }
+
+                    } catch (error) {
+                        console.error('Auth0 initialization error:', error);
+                    } finally {
+                        setAuthLoading(false);
+                    }
+                };
+
+                initAuth0();
+            }, []);
+
+            // Authentication Functions
+            const login = () => {
+                if (auth0Client) {
+                    auth0Client.loginWithRedirect({
+                        authorizationParams: {
+                            screen_hint: 'login'
+                        }
+                    });
+                }
+            };
+
+            const signup = () => {
+                if (auth0Client) {
+                    auth0Client.loginWithRedirect({
+                        authorizationParams: {
+                            screen_hint: 'signup'
+                        }
+                    });
+                }
+            };
+
+            const logout = () => {
+                if (auth0Client) {
+                    auth0Client.logout({
+                        logoutParams: {
+                            returnTo: window.location.origin
+                        }
+                    });
+                }
+            };
 
             // Voice Recognition Setup
             const startVoiceRecognition = () => {
@@ -537,10 +633,10 @@
                 try {
                     const response = await fetch(`${API_BASE}/api/calendar/sample_trip_123`);
                     const calendarData = await response.json();
-                    
+
                     // Create ICS file content
                     const icsContent = generateICSFile(calendarData);
-                    
+
                     // Download the file
                     const blob = new Blob([icsContent], { type: 'text/calendar' });
                     const url = URL.createObjectURL(blob);
@@ -551,7 +647,7 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
+
                     alert('📅 Calendar downloaded successfully! Import into your calendar app.');
                 } catch (error) {
                     console.error('Calendar download error:', error);
@@ -623,9 +719,9 @@
                             monitor_types: ['flight_delays', 'weather_alerts', 'activity_cancellations']
                         })
                     });
-                    
+
                     const result = await response.json();
-                    
+
                     if (response.ok) {
                         alert('🤖 Disruption monitoring activated! You\'ll be notified of any changes to your trip.');
                         // Start periodic checks (in production, this would use WebSockets or Server-Sent Events)
@@ -658,9 +754,9 @@
                     '🚧 Metro Line 1 experiencing delays. Allow extra travel time.',
                     '📞 Hotel Paris confirms early check-in available at 2:00 PM.'
                 ];
-                
+
                 const randomDisruption = disruptions[Math.floor(Math.random() * disruptions.length)];
-                
+
                 // Create notification
                 if (Notification.permission === 'granted') {
                     new Notification('TravelMaster AI Alert', {
@@ -684,7 +780,7 @@
                     // Generate trip ID
                     const tripId = `TRIP_${Date.now()}`;
                     const bookingConfirmation = `CONF_${tripId}`;
-                    
+
                     // Create new trip object
                     const newTrip = {
                         trip_id: tripId,
@@ -705,22 +801,22 @@
                     // Add to trips list
                     const updatedTrips = [...userTrips, newTrip];
                     setUserTrips(updatedTrips);
-                    
+
                     // Store in localStorage for persistence
                     localStorage.setItem('travelmaster_trips', JSON.stringify(updatedTrips));
-                    
+
                     // Clear current trip data
                     setItinerary(null);
                     setComprehensiveItinerary(null);
-                    
+
                     // Navigate directly to trips dashboard
                     setCurrentStep('trips');
-                    
+
                     // Show success message
                     setTimeout(() => {
                         alert(`🎉 Trip Submitted Successfully!\n\nTrip ID: ${tripId}\nConfirmation: ${bookingConfirmation}\n\nYour trip is now available in your dashboard! Click on the trip card to view calendar and wallet.`);
                     }, 500);
-                    
+
                 } catch (error) {
                     console.error('Trip submission error:', error);
                     alert(`❌ Failed to submit trip: ${error.message}\n\nPlease try again.`);
@@ -765,15 +861,15 @@
                 if (confirm('Are you sure you want to cancel this trip? This action cannot be undone.')) {
                     try {
                         // Update trip status to cancelled
-                        const updatedTrips = userTrips.map(trip => 
-                            trip.trip_id === tripId 
+                        const updatedTrips = userTrips.map(trip =>
+                            trip.trip_id === tripId
                                 ? { ...trip, status: 'cancelled', cancellation_date: new Date().toISOString() }
                                 : trip
                         );
-                        
+
                         setUserTrips(updatedTrips);
                         localStorage.setItem('travelmaster_trips', JSON.stringify(updatedTrips));
-                        
+
                         alert('Trip cancelled successfully');
                         setCurrentStep('trips');
                     } catch (error) {
@@ -823,11 +919,18 @@
                         special_requirements: specialReqRef.current?.value || ''
                     };
 
-                    const response = await fetch('http://localhost:8001/api/plan-trip', {
+                    // Prepare headers with authentication if available
+                    const headers = {
+                        'Content-Type': 'application/json',
+                    };
+
+                    if (accessToken) {
+                        headers['Authorization'] = `Bearer ${accessToken}`;
+                    }
+
+                    const response = await fetch('http://localhost:8000/api/plan-trip', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: headers,
                         body: JSON.stringify(requestData),
                     });
 
@@ -838,11 +941,17 @@
                         // Generate comprehensive AI itinerary with Gemini
                         try {
                             console.log('🤖 Generating comprehensive AI itinerary...');
-                            const comprehensiveResponse = await fetch('http://localhost:8001/api/generate-itinerary', {
+                            const comprehensiveHeaders = {
+                                'Content-Type': 'application/json',
+                            };
+
+                            if (accessToken) {
+                                comprehensiveHeaders['Authorization'] = `Bearer ${accessToken}`;
+                            }
+
+                            const comprehensiveResponse = await fetch('http://localhost:8000/api/generate-itinerary', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
+                                headers: comprehensiveHeaders,
                                 body: JSON.stringify({
                                     trip_data: result,
                                     special_instructions: requestData.special_requirements || "Create a memorable and well-organized travel experience."
@@ -852,10 +961,10 @@
                             if (comprehensiveResponse.ok) {
                                 const comprehensiveResult = await comprehensiveResponse.json();
                                 console.log('✅ Comprehensive itinerary generated:', comprehensiveResult);
-                                
+
                                 // Store comprehensive data
                                 setComprehensiveItinerary(comprehensiveResult);
-                                
+
                                 // Show success message
                                 setTimeout(() => {
                                     alert('🤖 AI Enhancement Complete!\n\nYour trip has been enhanced with:\n• Daily calendar timeline\n• Smart reservations hub\n• Disruption monitoring\n• Emergency contacts');
@@ -880,6 +989,64 @@
                 }
             };
 
+            // Authentication Component
+            const AuthComponent = () => (
+                <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-md w-full mx-auto">
+                    <div className="text-center">
+                        <div className="mb-6">
+                            <i className="fas fa-passport text-6xl text-blue-500 mb-4"></i>
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to TravelMaster</h1>
+                            <p className="text-gray-600">Sign in to plan your perfect trip with AI</p>
+                        </div>
+
+                        {authLoading ? (
+                            <div className="text-center py-8">
+                                <i className="fas fa-spinner fa-spin text-3xl text-blue-500 mb-4"></i>
+                                <p className="text-gray-600">Loading authentication...</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <button
+                                    onClick={login}
+                                    className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg"
+                                >
+                                    <i className="fas fa-sign-in-alt mr-2"></i>
+                                    Sign In
+                                </button>
+
+                                <button
+                                    onClick={signup}
+                                    className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-lg"
+                                >
+                                    <i className="fas fa-user-plus mr-2"></i>
+                                    Create Account
+                                </button>
+
+                                <div className="text-center mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                                    <p className="text-sm text-yellow-700">
+                                        <i className="fas fa-info-circle mr-1"></i>
+                                        Auth0 not configured - using demo mode
+                                    </p>
+                                    <button
+                                        onClick={() => { setCurrentStep('trips'); setIsAuthenticated(true); }}
+                                        className="mt-2 px-4 py-2 bg-yellow-500 text-white rounded font-medium hover:bg-yellow-600"
+                                    >
+                                        Continue as Demo User
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-8 pt-6 border-t border-gray-200">
+                            <div className="flex justify-center space-x-6 text-sm text-gray-500">
+                                <span><i className="fas fa-shield-alt mr-1"></i>Secure Auth0 Login</span>
+                                <span><i className="fas fa-globe mr-1"></i>Universal Access</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
             // Planning Form Component
             const PlanningForm = () => (
                 <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-4xl w-full">
@@ -894,7 +1061,29 @@
                             <span><i className="fas fa-robot mr-1"></i>Smart Planning</span>
                             <span><i className="fas fa-dollar-sign mr-1"></i>Budget Aware</span>
                             <span><i className="fas fa-microphone mr-1"></i>Voice Enabled</span>
+                            {isAuthenticated && <span><i className="fas fa-shield-alt mr-1"></i>Authenticated</span>}
                         </div>
+
+                        {/* User Info Bar */}
+                        {isAuthenticated && user && (
+                            <div className="mt-4 bg-white bg-opacity-20 rounded-lg p-3 flex justify-between items-center">
+                                <div className="flex items-center">
+                                    <img
+                                        src={user.picture}
+                                        alt={user.name}
+                                        className="w-8 h-8 rounded-full mr-3"
+                                        onError={(e) => { e.target.src = 'https://via.placeholder.com/32x32?text=👤' }}
+                                    />
+                                    <span className="text-white font-medium">Welcome, {user.name || user.email}</span>
+                                </div>
+                                <button
+                                    onClick={logout}
+                                    className="px-3 py-1 bg-red-500 bg-opacity-70 text-white rounded-md hover:bg-opacity-90 transition-all text-sm"
+                                >
+                                    <i className="fas fa-sign-out-alt mr-1"></i>Logout
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Form Fields */}
@@ -1395,7 +1584,7 @@
                             <p><strong>Destination:</strong> {itinerary?.request?.destination}</p>
                         </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                         <button
                             onClick={() => {
@@ -1423,12 +1612,12 @@
                         <h1 className="text-4xl font-bold mb-4">🏠 Trip Dashboard</h1>
                         <p className="text-xl text-gray-600">Manage your travel adventures</p>
                     </div>
-                    
+
                     <div className="mb-6">
                         <h2 className="text-2xl font-semibold">Your Trips ({userTrips.length})</h2>
                         <p className="text-gray-600 mt-2">Select a trip to view calendar, reservations, and monitoring</p>
                     </div>
-                    
+
                     {userTrips.length === 0 ? (
                         <div className="text-center py-12">
                             <div className="text-6xl mb-4">✈️</div>
@@ -1451,7 +1640,7 @@
                                             <h3 className="text-xl font-bold">{trip.destination}</h3>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="p-6">
                                         <div className="flex justify-between items-start mb-4">
                                             <div>
@@ -1466,7 +1655,7 @@
                                                 {trip.status.toUpperCase()}
                                             </span>
                                         </div>
-                                        
+
                                         <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
                                             <div>
                                                 <p className="text-gray-600">Budget</p>
@@ -1477,7 +1666,7 @@
                                                 <p className="font-semibold">{trip.travelers} people</p>
                                             </div>
                                         </div>
-                                        
+
                                         <div className="flex space-x-2">
                                             <button
                                                 onClick={() => loadTripDetails(trip.trip_id)}
@@ -1505,10 +1694,10 @@
             // Trip Dashboard component
             const TripDashboard = () => {
                 if (!selectedTrip) return <div>Loading...</div>;
-                
+
                 const tripData = selectedTrip.trip_data;
                 const itinerary = tripData.basic_itinerary || tripData.comprehensive_itinerary;
-                
+
                 // Helper function to format date
                 const formatDate = (dateStr) => {
                     const date = new Date(dateStr);
@@ -1526,11 +1715,11 @@
                     const startDate = new Date(itinerary?.request?.start_date);
                     const endDate = new Date(itinerary?.request?.end_date);
                     const days = [];
-                    
+
                     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                         const dayStr = d.toISOString().split('T')[0];
                         const dayEvents = [];
-                        
+
                         // Add flights for departure day
                         if (d.getTime() === startDate.getTime() && itinerary?.flights?.length > 0) {
                             const outboundFlight = itinerary.flights.find(f => f.departure_time?.includes(dayStr) || f.flight_id?.includes('outbound'));
@@ -1544,7 +1733,7 @@
                                 });
                             }
                         }
-                        
+
                         // Add hotel check-in on first day
                         if (d.getTime() === startDate.getTime() && itinerary?.hotels?.length > 0) {
                             const hotel = itinerary.hotels[0];
@@ -1556,7 +1745,7 @@
                                 icon: '🏨'
                             });
                         }
-                        
+
                         // Add restaurants (distribute across days)
                         const dayIndex = Math.floor((d.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
                         if (itinerary?.restaurants?.length > dayIndex) {
@@ -1569,7 +1758,7 @@
                                 icon: '🍽️'
                             });
                         }
-                        
+
                         // Add activities (distribute across days)
                         if (itinerary?.activities?.length > dayIndex) {
                             const activity = itinerary.activities[dayIndex];
@@ -1581,7 +1770,7 @@
                                 icon: activity.category === 'sightseeing' ? '👁️' : '🎪'
                             });
                         }
-                        
+
                         // Add return flight on last day
                         if (d.getTime() === endDate.getTime() && itinerary?.flights?.length > 1) {
                             const returnFlight = itinerary.flights.find(f => f.flight_id?.includes('return') || itinerary.flights.indexOf(f) === 1);
@@ -1595,7 +1784,7 @@
                                 });
                             }
                         }
-                        
+
                         if (dayEvents.length > 0) {
                             days.push({
                                 date: dayStr,
@@ -1608,7 +1797,7 @@
                 };
 
                 const calendarDays = generateCalendarDays();
-                
+
                 return (
                     <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-6xl w-full">
                         {/* Header */}
@@ -1662,13 +1851,13 @@
                                     ))}
                                 </div>
                                 <div className="mt-4 flex space-x-3">
-                                    <button 
+                                    <button
                                         onClick={downloadCalendar}
                                         className="px-4 py-2 bg-white bg-opacity-20 text-white rounded-lg hover:bg-opacity-30"
                                     >
                                         📥 Download Calendar
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={startDisruptionMonitoring}
                                         className="px-4 py-2 bg-yellow-500 bg-opacity-80 text-white rounded-lg hover:bg-opacity-100"
                                     >
@@ -1694,8 +1883,8 @@
                                             <p>{flight.departure_airport} → {flight.arrival_airport}</p>
                                             <p>{formatTime(flight.departure_time)} - {formatTime(flight.arrival_time)}</p>
                                             <p className="text-xs opacity-75">
-                                                Class: {flight.travel_class || 'Economy'} • 
-                                                Aircraft: {flight.aircraft || 'N/A'} • 
+                                                Class: {flight.travel_class || 'Economy'} •
+                                                Aircraft: {flight.aircraft || 'N/A'} •
                                                 ${flight.price} per person
                                             </p>
                                             <p className="text-xs opacity-75">
@@ -1710,7 +1899,7 @@
                                         </button>
                                     </div>
                                 ))}
-                                
+
                                 {/* Hotel Reservations */}
                                 {itinerary?.hotels?.map((hotel, index) => (
                                     <div key={index} className="bg-white bg-opacity-20 rounded-lg p-4">
@@ -1790,7 +1979,7 @@
                                                 Duration: {activity.duration || '2 hours'}
                                             </p>
                                             <p className="text-xs opacity-75">
-                                                ${activity.price || activity.cost} per person • 
+                                                ${activity.price || activity.cost} per person •
                                                 Total: ${((activity.price || activity.cost) * itinerary?.request?.travelers).toFixed(2)}
                                             </p>
                                         </div>
@@ -2310,7 +2499,7 @@
                     <div className="container mx-auto px-6 py-4">
                         <div className="flex justify-between items-center">
                             {/* Logo/Brand */}
-                            <div 
+                            <div
                                 onClick={() => setCurrentStep('trips')}
                                 className="flex items-center cursor-pointer hover:opacity-80 transition-opacity"
                             >
@@ -2326,8 +2515,8 @@
                                 <button
                                     onClick={() => setCurrentStep('trips')}
                                     className={`px-6 py-3 rounded-lg font-semibold transition-all ${
-                                        currentStep === 'trips' || currentStep === 'dashboard' 
-                                            ? 'bg-blue-500 text-white shadow-lg' 
+                                        currentStep === 'trips' || currentStep === 'dashboard'
+                                            ? 'bg-blue-500 text-white shadow-lg'
                                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
@@ -2351,6 +2540,16 @@
 
             // Main render logic
             const renderCurrentView = () => {
+                // Show auth screen if not authenticated and auth is properly configured
+                if (!isAuthenticated && !authLoading && AUTH0_DOMAIN !== 'your-domain.auth0.com') {
+                    return <AuthComponent />;
+                }
+
+                // Show auth component initially if in auth step
+                if (currentStep === 'auth') {
+                    return <AuthComponent />;
+                }
+
                 switch(currentStep) {
                     case 'planning': return <PlanningForm />;
                     case 'results': return <ResultsDisplay />;

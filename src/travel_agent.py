@@ -4,16 +4,17 @@ TravelMaster AI Agent - Simplified Implementation
 A basic travel planning service that will be enhanced with A2A protocol integration.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Annotated
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from enum import Enum
 import asyncio
 import uvicorn
+from auth_middleware import optional_auth, require_auth, get_user_id, get_user_email
 
 # Import the Gemini agent
 try:
@@ -743,10 +744,26 @@ travel_service = TravelPlanningService()
 
 
 @app.post("/api/plan-trip", response_model=TravelItinerary)
-async def plan_trip(request: TravelRequest):
+async def plan_trip(
+    request: TravelRequest,
+    user: Annotated[Optional[Dict], Depends(optional_auth)] = None
+):
     """Plan a complete trip based on user requirements"""
     try:
+        # Log user information if authenticated
+        if user:
+            user_id = get_user_id(user)
+            user_email = get_user_email(user)
+            print(f"🔐 Authenticated user planning trip: {user_email} (ID: {user_id})")
+        else:
+            print("🔓 Anonymous user planning trip")
+        
         itinerary = await travel_service.plan_trip(request)
+        
+        # If user is authenticated, we could save trip to their profile here
+        if user:
+            print(f"💾 Trip planned for authenticated user: {get_user_email(user)}")
+        
         return itinerary
     except Exception as e:
         import traceback
@@ -763,9 +780,17 @@ async def health_check():
 
 
 @app.get("/api/restaurants/{destination}")
-async def get_restaurants(destination: str, budget_per_meal: float = 50.0, cuisine: Optional[str] = None):
+async def get_restaurants(
+    destination: str, 
+    budget_per_meal: float = 50.0, 
+    cuisine: Optional[str] = None,
+    user: Annotated[Optional[Dict], Depends(optional_auth)] = None
+):
     """Search for restaurants in a specific destination"""
     try:
+        if user:
+            print(f"🔐 Authenticated user searching restaurants: {get_user_email(user)}")
+        
         cuisine_preferences = [cuisine] if cuisine else []
         restaurant_results = await travel_service.travel_apis.search_restaurants(
             destination=destination,
@@ -780,6 +805,58 @@ async def get_restaurants(destination: str, budget_per_meal: float = 50.0, cuisi
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search restaurants: {str(e)}")
+
+
+@app.get("/api/my-trips")
+async def get_my_trips(user: Annotated[Dict, Depends(require_auth)]):
+    """Get all trips for the authenticated user"""
+    user_id = get_user_id(user)
+    user_email = get_user_email(user)
+    
+    # In a real app, you'd query a database here
+    # For now, return mock data
+    return {
+        "user_id": user_id,
+        "user_email": user_email,
+        "trips": [
+            {
+                "id": "trip_001",
+                "destination": "Paris, France",
+                "start_date": "2025-11-15",
+                "end_date": "2025-11-22",
+                "status": "planned",
+                "total_cost": 3200.00
+            },
+            {
+                "id": "trip_002", 
+                "destination": "Tokyo, Japan",
+                "start_date": "2025-12-10",
+                "end_date": "2025-12-18",
+                "status": "booked",
+                "total_cost": 4500.00
+            }
+        ]
+    }
+
+
+@app.post("/api/save-trip")
+async def save_trip(
+    trip_data: Dict[str, Any],
+    user: Annotated[Dict, Depends(require_auth)]
+):
+    """Save a trip itinerary for the authenticated user"""
+    user_id = get_user_id(user)
+    user_email = get_user_email(user)
+    
+    print(f"💾 Saving trip for user: {user_email} (ID: {user_id})")
+    
+    # In a real app, you'd save to a database here
+    return {
+        "success": True,
+        "message": "Trip saved successfully",
+        "trip_id": f"trip_{user_id}_{int(datetime.now().timestamp())}",
+        "user_email": user_email
+    }
 
 
 @app.get("/")
@@ -1241,4 +1318,4 @@ if __name__ == "__main__":
     print("Try saying: 'I want to go to Paris with a budget of 3000 dollars for a luxury trip'")
     print("")
     
-    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
