@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0 (2025-09-28)
+
+
+### Features
+
+* Complete multi-trip dashboard with real data integration ([d81013b](https://github.com/LordCogsWorth/shell_hacks/commit/d81013b73efa08fdee17dc34418f6eac8c62e2a4))
+
 ## [0.3.7](https://github.com/a2aproject/a2a-python/compare/v0.3.6...v0.3.7) (2025-09-22)
 
 
