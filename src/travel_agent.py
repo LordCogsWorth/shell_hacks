@@ -15,6 +15,12 @@ from enum import Enum
 import asyncio
 import uvicorn
 
+# Import the Gemini agent
+try:
+    from .gemini_agent import gemini_agent, DailyItinerary, TripEvent
+except ImportError:
+    from gemini_agent import gemini_agent, DailyItinerary, TripEvent
+
 
 class TravelPreferences(str, Enum):
     BUDGET = "budget"
@@ -96,6 +102,63 @@ class TravelItinerary(BaseModel):
     savings: Decimal
     daily_schedule: List[Dict[str, Any]]
     budget_breakdown: Dict[str, Decimal]
+
+
+# New models for comprehensive trip management
+class TripEventModel(BaseModel):
+    """API model for trip events"""
+    date: str
+    start_time: str
+    end_time: str
+    title: str
+    type: str  # flight, hotel, restaurant, activity, sightseeing
+    location: str
+    description: str
+    cost: float
+    confirmation_number: Optional[str] = None
+    contact_info: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class DailyItineraryModel(BaseModel):
+    """API model for daily itinerary"""
+    date: str
+    day_of_week: str
+    location: str
+    events: List[TripEventModel]
+    daily_budget: float
+    weather_note: Optional[str] = None
+
+
+class ComprehensiveItinerary(BaseModel):
+    """Complete trip itinerary with AI-generated schedule"""
+    trip_summary: str
+    daily_itineraries: List[DailyItineraryModel]
+    total_planned_cost: float
+    trip_highlights: List[str]
+    local_tips: List[str]
+    emergency_contacts: Dict[str, str]
+    reservations: List[Dict[str, Any]]  # All tickets and confirmations
+
+
+class DisruptionAlert(BaseModel):
+    """Model for trip disruptions"""
+    type: str  # flight_delay, cancellation, weather, etc.
+    severity: str  # low, medium, high
+    affected_dates: List[str]
+    description: str
+    suggested_actions: List[str]
+
+
+class DisruptionResponse(BaseModel):
+    """Response for handling disruptions"""
+    urgency_level: str
+    immediate_actions: List[str]
+    alternative_options: List[Dict[str, Any]]
+    updated_schedule: List[Dict[str, Any]]
+    total_cost_impact: float
+    traveler_notes: List[str]
+    emergency_contacts: List[str]
 
 
 class TravelPlanningService:
@@ -737,22 +800,430 @@ async def root():
             }
         }
 
+@app.post("/api/generate-itinerary", response_model=ComprehensiveItinerary)
+async def generate_comprehensive_itinerary(
+    trip_data: TravelItinerary, 
+    special_instructions: Optional[str] = None
+):
+    """Generate a comprehensive AI-powered itinerary with daily schedules"""
+    try:
+        print(f"🤖 Generating comprehensive itinerary via Gemini AI...")
+        
+        # Convert TravelItinerary to dict for Gemini agent
+        trip_dict = {
+            "request": trip_data.request.dict(),
+            "flights": [flight.dict() for flight in trip_data.flights],
+            "hotels": [hotel.dict() for hotel in trip_data.hotels],
+            "activities": [activity.dict() for activity in trip_data.activities],
+            "restaurants": [restaurant.dict() for restaurant in trip_data.restaurants],
+            "budget_breakdown": trip_data.budget_breakdown
+        }
+        
+        # Generate itinerary using Gemini AI
+        daily_itineraries = await gemini_agent.generate_comprehensive_itinerary(
+            trip_dict, special_instructions
+        )
+        
+        # Convert to API models
+        api_itineraries = []
+        total_cost = 0.0
+        all_reservations = []
+        
+        for daily in daily_itineraries:
+            events = []
+            for event in daily.events:
+                events.append(TripEventModel(
+                    date=event.date,
+                    start_time=event.start_time,
+                    end_time=event.end_time,
+                    title=event.title,
+                    type=event.type,
+                    location=event.location,
+                    description=event.description,
+                    cost=event.cost,
+                    confirmation_number=event.confirmation_number,
+                    contact_info=event.contact_info,
+                    notes=event.notes
+                ))
+            
+            api_itineraries.append(DailyItineraryModel(
+                date=daily.date,
+                day_of_week=daily.day_of_week,
+                location=daily.location,
+                events=events,
+                daily_budget=daily.daily_budget,
+                weather_note=daily.weather_note
+            ))
+            
+            total_cost += daily.daily_budget
+        
+        # Create reservations list
+        for flight in trip_data.flights:
+            all_reservations.append({
+                "type": "flight",
+                "title": f"{flight.airline} {flight.departure_airport} → {flight.arrival_airport}",
+                "confirmation": flight.flight_id,
+                "date": flight.departure_time.isoformat()[:10],
+                "cost": float(flight.price),
+                "details": {
+                    "departure_time": flight.departure_time.isoformat(),
+                    "arrival_time": flight.arrival_time.isoformat(),
+                    "aircraft": flight.aircraft,
+                    "class": flight.travel_class
+                }
+            })
+        
+        for i, hotel in enumerate(trip_data.hotels):
+            all_reservations.append({
+                "type": "hotel",
+                "title": hotel.name,
+                "confirmation": f"HOTEL_{i+1:03d}",
+                "date": trip_data.request.start_date.isoformat(),
+                "cost": float(hotel.total_price),
+                "details": {
+                    "check_in": trip_data.request.start_date.isoformat(),
+                    "check_out": trip_data.request.end_date.isoformat(),
+                    "location": hotel.location,
+                    "amenities": hotel.amenities
+                }
+            })
+        
+        return ComprehensiveItinerary(
+            trip_summary=f"Comprehensive {len(daily_itineraries)}-day itinerary for {trip_data.request.destination}",
+            daily_itineraries=api_itineraries,
+            total_planned_cost=total_cost,
+            trip_highlights=["AI-generated highlights coming soon"],
+            local_tips=["Local insights will be added"],
+            emergency_contacts={
+                "local_emergency": "911",
+                "hotel": "Contact hotel directly"
+            },
+            reservations=all_reservations
+        )
+        
+    except Exception as e:
+        print(f"❌ Failed to generate comprehensive itinerary: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate itinerary: {str(e)}")
+
+
+@app.post("/api/handle-disruption", response_model=DisruptionResponse)
+async def handle_trip_disruption(disruption: DisruptionAlert, current_itinerary: List[DailyItineraryModel]):
+    """Handle trip disruptions and provide alternatives"""
+    try:
+        print(f"🚨 Handling trip disruption: {disruption.type}")
+        
+        # Convert models to dict for Gemini agent
+        disruption_dict = disruption.dict()
+        itinerary_objects = []
+        
+        for daily in current_itinerary:
+            events = []
+            for event in daily.events:
+                events.append(TripEvent(
+                    date=event.date,
+                    start_time=event.start_time,
+                    end_time=event.end_time,
+                    title=event.title,
+                    type=event.type,
+                    location=event.location,
+                    description=event.description,
+                    cost=event.cost,
+                    confirmation_number=event.confirmation_number,
+                    contact_info=event.contact_info,
+                    notes=event.notes
+                ))
+            
+            itinerary_objects.append(DailyItinerary(
+                date=daily.date,
+                day_of_week=daily.day_of_week,
+                location=daily.location,
+                events=events,
+                daily_budget=daily.daily_budget,
+                weather_note=daily.weather_note
+            ))
+        
+        # Handle disruption using Gemini AI
+        response_dict = await gemini_agent.handle_trip_disruption(
+            disruption_dict, itinerary_objects
+        )
+        
+        return DisruptionResponse(**response_dict)
+        
+    except Exception as e:
+        print(f"❌ Failed to handle disruption: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to handle disruption: {str(e)}")
+
+
+@app.get("/api/calendar/{trip_id}")
+async def get_trip_calendar(trip_id: str):
+    """Get calendar view of trip itinerary"""
+    try:
+        # In a real implementation, you'd fetch the trip from a database
+        # For now, we'll return a sample calendar format
+        return {
+            "trip_id": trip_id,
+            "calendar_format": "ics",
+            "calendar_url": f"/api/calendar/{trip_id}/download",
+            "calendar_view": {
+                "view_type": "timeline",
+                "days": [
+                    {
+                        "date": "2025-10-27",
+                        "day_name": "Monday", 
+                        "timeline": [
+                            {
+                                "time": "08:00",
+                                "duration": "2h",
+                                "event": "Flight Departure",
+                                "location": "JFK Airport",
+                                "status": "confirmed",
+                                "icon": "✈️"
+                            },
+                            {
+                                "time": "14:30",
+                                "duration": "30min",
+                                "event": "Hotel Check-in", 
+                                "location": "Hotel Paris",
+                                "status": "confirmed",
+                                "icon": "🏨"
+                            },
+                            {
+                                "time": "19:00",
+                                "duration": "2h",
+                                "event": "Dinner at Francette",
+                                "location": "1 Port de Suffren, Paris",
+                                "status": "confirmed",
+                                "icon": "🍽️"
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get calendar: {str(e)}")
+
+@app.get("/api/reservations/{trip_id}")
+async def get_trip_reservations(trip_id: str):
+    """Get all reservations and confirmations for a trip"""
+    try:
+        return {
+            "trip_id": trip_id,
+            "reservations": {
+                "flights": [
+                    {
+                        "id": "flight_001",
+                        "type": "flight",
+                        "confirmation": "ABC123",
+                        "airline": "American Airlines",
+                        "flight_number": "AA1234",
+                        "date": "2025-10-27",
+                        "time": "08:00",
+                        "route": "JFK → CDG",
+                        "status": "confirmed",
+                        "qr_code": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA...",
+                        "mobile_boarding_pass": "https://aa.com/boarding-pass/ABC123"
+                    }
+                ],
+                "hotels": [
+                    {
+                        "id": "hotel_001", 
+                        "type": "hotel",
+                        "confirmation": "HTL456",
+                        "name": "Hotel Paris",
+                        "check_in": "2025-10-27",
+                        "check_out": "2025-11-03",
+                        "address": "123 Champs-Élysées, Paris",
+                        "status": "confirmed",
+                        "contact": "+33 1 23 45 67 89"
+                    }
+                ],
+                "restaurants": [
+                    {
+                        "id": "restaurant_001",
+                        "type": "restaurant", 
+                        "confirmation": "RST789",
+                        "name": "Francette",
+                        "date": "2025-10-27",
+                        "time": "19:00",
+                        "party_size": 2,
+                        "address": "1 Port de Suffren, 75007 Paris",
+                        "status": "confirmed",
+                        "contact": "+33 1 98 76 54 32"
+                    }
+                ],
+                "activities": [
+                    {
+                        "id": "activity_001",
+                        "type": "activity",
+                        "confirmation": "ACT321",
+                        "name": "Eiffel Tower Skip-the-Line",
+                        "date": "2025-10-28", 
+                        "time": "10:00",
+                        "duration": "2 hours",
+                        "meeting_point": "Eiffel Tower South Pillar",
+                        "status": "confirmed",
+                        "mobile_ticket": "https://tickets.com/eiffel/ACT321"
+                    }
+                ]
+            },
+            "emergency_contacts": {
+                "hotel": "+33 1 23 45 67 89",
+                "local_emergency": "112",
+                "us_embassy": "+33 1 43 12 22 22",
+                "travel_insurance": "1-800-555-0123"
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get reservations: {str(e)}")
+
+@app.post("/api/monitor-disruptions")
+async def monitor_trip_disruptions(trip_id: str, monitoring_preferences: Dict[str, Any]):
+    """Start monitoring for trip disruptions"""
+    try:
+        # In a real implementation, this would set up real-time monitoring
+        return {
+            "monitoring_status": "active",
+            "trip_id": trip_id,
+            "monitoring_types": [
+                "flight_delays",
+                "flight_cancellations", 
+                "weather_alerts",
+                "hotel_issues",
+                "activity_cancellations"
+            ],
+            "notification_methods": monitoring_preferences.get("notifications", ["email", "sms", "push"]),
+            "check_frequency": "real-time",
+            "last_checked": datetime.now().isoformat(),
+            "alerts_enabled": True
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start monitoring: {str(e)}")
+
+# In-memory storage for trips (in production, use a proper database)
+user_trips = {}
+trip_counter = 1
+
+@app.post("/api/book-trip")
+async def book_trip(trip_data: Dict[str, Any]):
+    """Book and save a trip"""
+    global trip_counter
+    try:
+        trip_id = f"TRIP_{trip_counter:06d}"
+        trip_counter += 1
+        
+        # Store the trip data as-is (comprehensive itinerary should already be generated)
+        print(f"📝 Booking trip with data keys: {list(trip_data.keys())}")
+        
+        # Add booking metadata
+        booking_data = {
+            "trip_id": trip_id,
+            "booking_date": datetime.now().isoformat(),
+            "status": "confirmed",
+            "user_id": "user_001",  # In production, get from auth
+            "trip_data": trip_data,
+            "notifications_enabled": True,
+            "calendar_synced": False
+        }
+        
+        # Store trip (in production, save to database)
+        if "user_001" not in user_trips:
+            user_trips["user_001"] = {}
+        user_trips["user_001"][trip_id] = booking_data
+        
+        return {
+            "success": True,
+            "trip_id": trip_id,
+            "booking_confirmation": f"CONF_{trip_id}",
+            "message": "🎉 Trip booked successfully! Access your dashboard to manage this trip.",
+            "dashboard_url": f"/dashboard/{trip_id}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to book trip: {str(e)}")
+
+@app.get("/api/trips")
+async def get_user_trips(user_id: str = "user_001"):
+    """Get all trips for a user"""
+    try:
+        trips = user_trips.get(user_id, {})
+        trip_list = []
+        
+        for trip_id, trip_data in trips.items():
+            basic_info = trip_data["trip_data"]
+            request_info = basic_info.get("request", {})
+            
+            trip_list.append({
+                "trip_id": trip_id,
+                "destination": request_info.get("destination", "Unknown"),
+                "start_date": request_info.get("start_date", ""),
+                "end_date": request_info.get("end_date", ""),
+                "status": trip_data["status"],
+                "booking_date": trip_data["booking_date"],
+                "budget": request_info.get("budget", 0),
+                "travelers": request_info.get("travelers", 1)
+            })
+        
+        return {
+            "trips": trip_list,
+            "total_trips": len(trip_list)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get trips: {str(e)}")
+
+@app.get("/api/trip/{trip_id}")
+async def get_trip_details(trip_id: str, user_id: str = "user_001"):
+    """Get detailed trip information"""
+    try:
+        user_trip_data = user_trips.get(user_id, {})
+        if trip_id not in user_trip_data:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        trip = user_trip_data[trip_id]
+        return trip
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get trip details: {str(e)}")
+
+@app.delete("/api/trip/{trip_id}")
+async def cancel_trip(trip_id: str, user_id: str = "user_001"):
+    """Cancel a trip"""
+    try:
+        user_trip_data = user_trips.get(user_id, {})
+        if trip_id not in user_trip_data:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        
+        # Update status instead of deleting
+        user_trip_data[trip_id]["status"] = "cancelled"
+        user_trip_data[trip_id]["cancellation_date"] = datetime.now().isoformat()
+        
+        return {
+            "success": True,
+            "message": "Trip cancelled successfully",
+            "refund_info": "Refund will be processed within 3-5 business days"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel trip: {str(e)}")
+
 @app.get("/api/info")
 async def api_info():
     """API information endpoint"""
     return {
         "service": "TravelMaster AI Agent",
-        "description": "AI-powered travel planning service with voice interaction",
-        "version": "1.0.0",
+        "description": "AI-powered travel planning service with comprehensive itinerary management",
+        "version": "2.0.0",
         "features": [
             "AI-powered trip planning",
             "Voice interaction",
             "Budget optimization", 
             "Real-time booking",
-            "Multi-preference support"
+            "Multi-preference support",
+            "Comprehensive itinerary generation",
+            "Trip disruption handling",
+            "Centralized reservations management"
         ],
         "endpoints": {
             "plan_trip": "/api/plan-trip",
+            "generate_itinerary": "/api/generate-itinerary",
+            "handle_disruption": "/api/handle-disruption",
             "health": "/api/health",
             "docs": "/docs"
         }
@@ -770,4 +1241,4 @@ if __name__ == "__main__":
     print("Try saying: 'I want to go to Paris with a budget of 3000 dollars for a luxury trip'")
     print("")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(app, host="0.0.0.0", port=8001, reload=False)
