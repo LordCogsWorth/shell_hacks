@@ -8,6 +8,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -131,9 +132,21 @@
         // Main App Component
         function TravelMasterApp() {
             // API Configuration
-            const API_BASE = 'http://localhost:8001';
+            const API_BASE = 'http://localhost:8000';
             
-            const [currentStep, setCurrentStep] = useState('trips');
+            // Auth0 Configuration - SPA Application
+            const AUTH0_DOMAIN = 'dev-5sxkcuwmv28osx0h.us.auth0.com'; // Your Auth0 domain
+            const AUTH0_CLIENT_ID = 'UsjWQHn4crWHZaQHgbFqDPd6JNbIFbsI'; // Your SPA Client ID
+            const AUTH0_AUDIENCE = 'TravelAgent'; // Your API audience
+            
+            // Authentication State
+            const [auth0Client, setAuth0Client] = useState(null);
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [user, setUser] = useState(null);
+            const [accessToken, setAccessToken] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            
+            const [currentStep, setCurrentStep] = useState('auth');
             const [travelRequest, setTravelRequest] = useState({
                 destination: '',
                 departure_location: '',
@@ -161,6 +174,89 @@
             const endDateRef = useRef(null);
             const travelersRef = useRef(null);
             const preferencesRef = useRef(new Set());
+
+            // Auth0 Initialization
+            useEffect(() => {
+                const initAuth0 = async () => {
+                    try {
+                        // Check if Auth0 credentials are configured
+                        if (AUTH0_DOMAIN === 'your-domain.auth0.com' || AUTH0_CLIENT_ID === 'your-client-id') {
+                            console.warn('Auth0 not configured - using demo mode');
+                            setAuthLoading(false);
+                            setCurrentStep('trips');
+                            return;
+                        }
+
+                        const auth0 = await window.auth0.createAuth0Client({
+                            domain: AUTH0_DOMAIN,
+                            clientId: AUTH0_CLIENT_ID,
+                            authorizationParams: {
+                                redirect_uri: window.location.origin,
+                                audience: AUTH0_AUDIENCE,
+                                scope: 'openid profile email'
+                            }
+                        });
+
+                        setAuth0Client(auth0);
+
+                        // Handle redirect callback
+                        if (window.location.search.includes('code=')) {
+                            await auth0.handleRedirectCallback();
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                        }
+
+                        // Check if user is authenticated
+                        const authenticated = await auth0.isAuthenticated();
+                        setIsAuthenticated(authenticated);
+
+                        if (authenticated) {
+                            const userProfile = await auth0.getUser();
+                            const token = await auth0.getTokenSilently();
+                            setUser(userProfile);
+                            setAccessToken(token);
+                            setCurrentStep('trips');
+                        }
+
+                    } catch (error) {
+                        console.error('Auth0 initialization error:', error);
+                    } finally {
+                        setAuthLoading(false);
+                    }
+                };
+
+                initAuth0();
+            }, []);
+
+            // Authentication Functions
+            const login = () => {
+                if (auth0Client) {
+                    auth0Client.loginWithRedirect({
+                        authorizationParams: {
+                            screen_hint: 'login'
+                        }
+                    });
+                }
+            };
+
+            const signup = () => {
+                if (auth0Client) {
+                    auth0Client.loginWithRedirect({
+                        authorizationParams: {
+                            screen_hint: 'signup'
+                        }
+                    });
+                }
+            };
+
+            const logout = () => {
+                if (auth0Client) {
+                    auth0Client.logout({
+                        logoutParams: {
+                            returnTo: window.location.origin
+                        }
+                    });
+                }
+            };
 
             // Voice Recognition Setup
             const startVoiceRecognition = () => {
@@ -529,11 +625,18 @@
                         special_requirements: specialReqRef.current?.value || ''
                     };
 
-                    const response = await fetch('http://localhost:8001/api/plan-trip', {
+                    // Prepare headers with authentication if available
+                    const headers = {
+                        'Content-Type': 'application/json',
+                    };
+                    
+                    if (accessToken) {
+                        headers['Authorization'] = `Bearer ${accessToken}`;
+                    }
+
+                    const response = await fetch('http://localhost:8000/api/plan-trip', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: headers,
                         body: JSON.stringify(requestData),
                     });
 
@@ -544,11 +647,17 @@
                         // Generate comprehensive AI itinerary with Gemini
                         try {
                             console.log('🤖 Generating comprehensive AI itinerary...');
-                            const comprehensiveResponse = await fetch('http://localhost:8001/api/generate-itinerary', {
+                            const comprehensiveHeaders = {
+                                'Content-Type': 'application/json',
+                            };
+                            
+                            if (accessToken) {
+                                comprehensiveHeaders['Authorization'] = `Bearer ${accessToken}`;
+                            }
+
+                            const comprehensiveResponse = await fetch('http://localhost:8000/api/generate-itinerary', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
+                                headers: comprehensiveHeaders,
                                 body: JSON.stringify({
                                     trip_data: result,
                                     special_instructions: requestData.special_requirements || "Create a memorable and well-organized travel experience."
@@ -586,6 +695,64 @@
                 }
             };
 
+            // Authentication Component
+            const AuthComponent = () => (
+                <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-md w-full mx-auto">
+                    <div className="text-center">
+                        <div className="mb-6">
+                            <i className="fas fa-passport text-6xl text-blue-500 mb-4"></i>
+                            <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to TravelMaster</h1>
+                            <p className="text-gray-600">Sign in to plan your perfect trip with AI</p>
+                        </div>
+
+                        {authLoading ? (
+                            <div className="text-center py-8">
+                                <i className="fas fa-spinner fa-spin text-3xl text-blue-500 mb-4"></i>
+                                <p className="text-gray-600">Loading authentication...</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <button
+                                    onClick={login}
+                                    className="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all shadow-lg"
+                                >
+                                    <i className="fas fa-sign-in-alt mr-2"></i>
+                                    Sign In
+                                </button>
+
+                                <button
+                                    onClick={signup}
+                                    className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all shadow-lg"
+                                >
+                                    <i className="fas fa-user-plus mr-2"></i>
+                                    Create Account
+                                </button>
+
+                                <div className="text-center mt-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                                    <p className="text-sm text-yellow-700">
+                                        <i className="fas fa-info-circle mr-1"></i>
+                                        Auth0 not configured - using demo mode
+                                    </p>
+                                    <button
+                                        onClick={() => {setCurrentStep('trips'); setIsAuthenticated(true);}}
+                                        className="mt-2 px-4 py-2 bg-yellow-500 text-white rounded font-medium hover:bg-yellow-600"
+                                    >
+                                        Continue as Demo User
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-8 pt-6 border-t border-gray-200">
+                            <div className="flex justify-center space-x-6 text-sm text-gray-500">
+                                <span><i className="fas fa-shield-alt mr-1"></i>Secure Auth0 Login</span>
+                                <span><i className="fas fa-globe mr-1"></i>Universal Access</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
             // Planning Form Component
             const PlanningForm = () => (
                 <div className="glass-effect rounded-2xl p-8 shadow-2xl max-w-4xl w-full">
@@ -600,7 +767,29 @@
                             <span><i className="fas fa-robot mr-1"></i>Smart Planning</span>
                             <span><i className="fas fa-dollar-sign mr-1"></i>Budget Aware</span>
                             <span><i className="fas fa-microphone mr-1"></i>Voice Enabled</span>
+                            {isAuthenticated && <span><i className="fas fa-shield-alt mr-1"></i>Authenticated</span>}
                         </div>
+                        
+                        {/* User Info Bar */}
+                        {isAuthenticated && user && (
+                            <div className="mt-4 bg-white bg-opacity-20 rounded-lg p-3 flex justify-between items-center">
+                                <div className="flex items-center">
+                                    <img 
+                                        src={user.picture} 
+                                        alt={user.name} 
+                                        className="w-8 h-8 rounded-full mr-3"
+                                        onError={(e) => {e.target.src = 'https://via.placeholder.com/32x32?text=👤'}}
+                                    />
+                                    <span className="text-white font-medium">Welcome, {user.name || user.email}</span>
+                                </div>
+                                <button
+                                    onClick={logout}
+                                    className="px-3 py-1 bg-red-500 bg-opacity-70 text-white rounded-md hover:bg-opacity-90 transition-all text-sm"
+                                >
+                                    <i className="fas fa-sign-out-alt mr-1"></i>Logout
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Form Fields */}
@@ -1570,6 +1759,16 @@
 
             // Main render logic
             const renderCurrentView = () => {
+                // Show auth screen if not authenticated and auth is properly configured
+                if (!isAuthenticated && !authLoading && AUTH0_DOMAIN !== 'your-domain.auth0.com') {
+                    return <AuthComponent />;
+                }
+                
+                // Show auth component initially if in auth step
+                if (currentStep === 'auth') {
+                    return <AuthComponent />;
+                }
+                
                 switch(currentStep) {
                     case 'planning': return <PlanningForm />;
                     case 'results': return <ResultsDisplay />;
